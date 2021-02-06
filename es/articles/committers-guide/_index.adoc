@@ -1,0 +1,2152 @@
+---
+title: Guía para los committers
+authors:
+  - author: The FreeBSD Documentation Project
+copyright: 1999-2019 The FreeBSD Documentation Project
+releaseinfo: "$FreeBSD$" 
+trademarks: ["freebsd", "coverity", "ibm", "intel", "sparc", "general"]
+---
+
+= Guía para los committers
+:doctype: article
+:toc: macro
+:toclevels: 1
+:icons: font
+:sectnums:
+:sectnumlevels: 6
+:source-highlighter: rouge
+:experimental:
+
+include::shared/authors.adoc[]
+include::shared/es/teams.adoc[lines=16..-1]
+include::shared/es/mailing-lists.adoc[]
+include::shared/es/urls.adoc[]
+
+[.abstract-title]
+Resumen
+
+Este documento proporciona información para la comunidad de committers de FreeBSD. Todos los committers nuevos deben leer este documento antes de empezar, y se recomienda encarecidamente a los committers actuales que lo revisen de vez en cuando.
+
+Casi todos los desarrolladores de FreeBSD tienen derechos sobre uno o más repositorios. Sin embargo, algunos desarrolladores no los tienen, y parte de la información aquí se aplica también a ellos. (Por ejemplo, algunas personas solo tienen derecho para trabajar con la base de datos de informes de problemas). Por favor, vea <<non-committers>> para más información.
+
+Este documento también puede ser de interés para los miembros de la comunidad de FreeBSD que quieran saber más sobre el funcionamiento del proyecto.
+
+'''
+
+toc::[]
+
+[[admin]]
+== Detalles administrativos
+
+[.informaltable]
+[cols="1,1", frame="none"]
+|===
+
+|_Métodos de acceso_
+|man:ssh[1], solo el protocolo 2
+
+|_Servidor shell principal_
+|`freefall.FreeBSD.org`
+
+|_Host SMTP_
+|`smtp.FreeBSD.org:587` (vea también <<smtp-setup>>).
+
+|__``src/`` raíz de subversion__
+|`svn+ssh:// repo.FreeBSD.org`[.filename]#/base# (vea también <<svn-getting-started-base-layout>>).
+
+|__``doc/`` raíz de subversion__
+|`svn+ssh:// repo.FreeBSD.org`[.filename]#/doc# (ver también <<svn-getting-started-doc-layout>>).
+
+|__``ports/`` raíz de subversion__
+|`svn+ssh:// repo.FreeBSD.org`[.filename]#/ports# (vea también <<svn-getting-started-ports-layout>>
+
+|_Listas de correo interno_
+|developers (técnicamente all-developers), doc-developers, doc-committers, ports-developers, ports-committers, src-developers, src-committers. (Cada repositorio del proyecto tiene sus propias listas de correo de -developers y -committers. Los archivos historicos de estas listas se pueden encontrar en [.filename]#/local/mail/repository-name-developers-archive# y [.filename]#/local/mail/repository-name-committers-archive# en el clúster de `FreeBSD.org`)
+
+|_Informes mensuales del Core Team_
+|[.filename]#/home/core/public/monthly-reports# en el clúster de `FreeBSD.org`.
+
+|_Informes mensuales del equipo de gestión de los ports_
+|[.filename]#/home/portmgr/public/monthly-reports# en el clúster de `FreeBSD.org`.
+
+|Ramas SVN descatables `src/`
+|``stable/``__n:__ (__n__-STABLE), ``head`` (-CURRENT)
+|===
+
+Se requiere man:ssh[1] para conectarse a los hosts del proyecto. Para obtener más información, consulte la <<ssh-guide>>.
+
+Enlaces de interés:
+
+* link:https://www.FreeBSD.org/internal/[Páginas internas del proyecto FreeBSD]
+* link:https://www.FreeBSD.org/internal/machines/[Hosts del proyecto FreeBSD]
+* link:https://www.FreeBSD.org/administration/[Grupos administrativos del proyecto FreeBSD]
+
+[[pgpkeys]]
+== Claves OpenPGP para FreeBSD
+
+El proyecto FreeBSD utiliza claves criptográficas compatibles con OpenPGP (_Pretty Good Privacy_) para autenticar a los committers. Los mensajes que contienen información importante, como las claves públicas SSH, se pueden firmar con una clave OpenPGP para demostrar que son realmente del committer. Para obtener más información consulte http://www.nostarch.com/pgp_ml.htm[PGP & GPG: Email for the Practical Paranoid by Michael Lucas] y http://en.wikipedia.org/wiki/Pretty_Good_Privacy[].
+
+[[pgpkeys-creating]]
+=== Creando una clave
+
+Se pueden utilizar las claves ya existentes, pero primero, deben ser comprobadas con el script [.filename]#doc/head/share/pgpkeys/checkkey.sh#. En este caso, asegúrese de que la clave tenga un ID de usuario de FreeBSD.
+
+Para aquellos que aún no disponen de una clave OpenPGP, o necesitan una nueva clave para cumplir con los requisitos de seguridad de FreeBSD, en esta sección le mostraremos cómo generar una.
+
+[[pgpkeys-create-steps]]
+[.procedure]
+. Instale [.filename]#security/gnupg#. Introduzca estas líneas en el archivo [.filename]#~/.gnupg/gpg.conf# para establecer los valores mínimos aceptables de forma predeterminada:
++
+[.programlisting]
+....
+fixed-list-mode
+keyid-format 0xlong
+personal-digest-preferences SHA512 SHA384 SHA256 SHA224
+default-preference-list SHA512 SHA384 SHA256 SHA224 AES256 AES192 AES CAST5 BZIP2 ZLIB ZIP Uncompressed
+use-agent
+verify-options show-uid-validity
+list-options show-uid-validity
+sig-notation issuer-fpr@notations.openpgp.fifthhorseman.net=%g
+cert-digest-algo SHA512
+....
+
+. Generar una clave:
++
+[source,bash]
+....
+% gpg --full-gen-key
+gpg (GnuPG) 2.1.8; Copyright (C) 2015 Free Software Foundation, Inc.
+This is free software: you are free to change and redistribute it.
+There is NO WARRANTY, to the extent permitted by law.
+
+Warning: using insecure memory!
+Please select what kind of key you want:
+   (1) RSA and RSA (default)
+   (2) DSA and Elgamal
+   (3) DSA (sign only)
+   (4) RSA (sign only)
+Your selection? 1
+RSA keys may be between 1024 and 4096 bits long.
+What keysize do you want? (2048) 2048 <.>
+Requested keysize is 2048 bits
+Please specify how long the key should be valid.
+	 0 = key does not expire
+      <n>  = key expires in n days
+      <n>w = key expires in n weeks
+      <n>m = key expires in n months
+      <n>y = key expires in n years
+Key is valid for? (0) 3y <.>
+Key expires at Wed Nov  4 17:20:20 2015 MST
+Is this correct? (y/N) y
+GnuPG needs to construct a user ID to identify your key.
+
+Real name: Chucky Daemon <.>
+Email address: notreal@example.com
+Comment:
+You selected this USER-ID:
+"Chucky Daemon <notreal@example.com>"
+
+Change (N)ame, (C)omment, (E)mail or (O)kay/(Q)uit? o
+You need a Passphrase to protect your secret key.
+....
+
+<.> Las claves de 2048 bits con una caducidad de tres años proporcionan una protección adecuada en el momento de escribir estas líneas(12-2013). El artículo http://danielpocock.com/rsa-key-sizes-2048-or-4096-bits[] describe la situación con más detalle.
+<.> Tres años de vida útil para una clave hacen que sea lo suficientemente corta como para hacer que quede obsoleta por el avance de la potencia de los ordenadores, pero lo suficiente para reducir los problemas de administración de claves.
+<.> Utilice su nombre real, preferiblemente, que coincida con el que se muestra en la identificación (ID) emitida por su gobierno, para que sea más fácil para otros verificar su identidad. En la sección de `Comment`, puede añadir algún texto que ayude a otros a identificarlo.
++ 
+Después de introducir la dirección de correo electrónico, se solicita una contraseña. Los métodos para crear una contraseña segura son bastante polémicos. En lugar de sugerir una única forma, aquí hay algunos enlaces a sitios que describen varios métodos: http://world.std.com/~reinhold/diceware.html[], http://www.iusmentis.com/security/passphrasefaq/[], http://xkcd.com/936/[], http://en.wikipedia.org/wiki/Passphrase[].
+
+Proteja la clave privada y la contraseña. Si la clave privada o la contraseña podrían haber sido comprometidas o reveladas, notifiquelo de forma inmediata a mailto:accounts@FreeBSD.org[accounts@FreeBSD.org] y revoque la clave.
+
+El proceso para hacer el commit de la nueva clave se muestra en <<commit-steps>>.
+
+[[kerberos-ldap]]
+== Kerberos y contraseña web LDAP para el clúster de FreeBSD
+
+El clúster de FreeBSD requiere una contraseña de Kerberos para acceder a ciertos servicios. La contraseña de Kerberos también sirve como contraseña web LDAP, ya que LDAP hace un proxy a Kerberos en el clúster. Algunos de los servicios que requieren esto incluyen:
+
+* https://bugs.freebsd.org/bugzilla[Bugzilla]
+* https://ci.freebsd.org[Jenkins]
+
+Para crear una nueva cuenta de Kerberos en el clúster de FreeBSD, o para restablecer una contraseña de Kerberos para una cuenta existente utilizando un generador de contraseñas aleatorias:
+
+[source,bash]
+....
+% ssh kpasswd.freebsd.org
+....
+
+[NOTE]
+====
+Esto debe hacerse desde una máquina fuera del clúster de FreeBSD.org.
+====
+
+Una contraseña de Kerberos también se puede establecer manualmente iniciando sesión en `freefall.FreeBSD.org` y ejecutando:
+
+[source,bash]
+....
+% kpasswd
+....
+
+[NOTE]
+====
+A menos que los servicios autenticados por Kerberos del clúster FreeBSD.org se hayan utilizado previamente, se mostrará `Client unknown`. Esto error significa que el método `ssh kpasswd.freebsd.org` que se muestra arriba desde ejecutarse primero para inicializar la cuenta de Kerberos.
+====
+
+[[committer-types]]
+== Tipos de Commit Bits
+
+El repositorio de FreeBSD tiene una serie de componentes que, cuando se combinan, integran el código fuente del sistema base del sistema operativo, la documentación, la infraestructura de ports de las aplicaciones de terceros y varias utilidades mantenidas. Cuando se asignan los commit bits, se especifican las áras del árbol donde se tiene permiso. Generalmente, las áreas asociadas con un commit bit reflejan quién autorizó la asignación del commit bit. Se pueden agregar más áreas de autoridad posteriormente: cuando esto ocurre, el committer debe seguir los procedimientos normales de asignación de commit bit para esa área del árbol, buscar la aprobación de la entidad apropiada y posiblemente obtener un mentor para esa área durante un cierto periodo de tiempo.
+
+[.informaltable]
+[cols="1,1,1", frame="none"]
+|===
+
+|_Tipo de committer_
+|_Responsable_
+|_Componentes del árbol_
+
+|src
+|core@
+|src/, doc/ sujeto a una revisión apropiada
+
+|doc
+|doceng@
+|doc/, ports/, src/ documentation
+
+|ports
+|portmgr@
+|ports/
+|===
+
+Los commit bits asignados antes de que se conozca el funcionamiento de la sección sobre la cual se tenga autoridad, pueden ser apropiados para su uso en muchas partes del árbol. Sin embargo, el sentido común dicta que un committer que no haya trabajado previamente en esa área del árbol busque una revisión antes de realizar el commit, busque la aprobación del equipo responsable, y/o trabaje con un mentor. Dado que las reglas con respecto al mantenimiento del código difieren según el área del árbol, esto será beneficioso tanto para quién trabaja en un área del árbol con la que no está muy familiarizado como para quiénes trabajan en el árbol.
+
+Se anima a los committers a buscar la revisión de su trabajo como parte del proceso natural del desarrollo, independientemente del área del árbol en la cual se esté realizando el trabajo.
+
+=== Política para la actividad de los Committers en otros árboles
+
+* Todos los committers pueden modificar [.filename]#base/head/share/misc/committers-*.dot#, [.filename]#base/head/usr.bin/calendar/calendars/calendar.freebsd#, y [.filename]#ports/head/astro/xearth/files#.
+* los doc committers pueden realizar commits en la documentación de [.filename]#src#, como las páginas man, READMEs, bases de datos de fortune, archivos de calendario y correcciones de comentarios sin la aprobación de un src committer, teniendo en cuenta las normas requeridas para la correcta realización de los commits.
+* Cualquier committer puede realizar cambios en cualquier otro árbol con un "Approved by" de un committer que no esté tutelado y dispone del commit bit apropiado.
+* Los committers pueden adquirir commit bit adicionales mediante el proceso habitual, encontrar a un mentor que lo proponga a core, doceng o portmgr, según sea el caso. Una vez aprobados, se añadirán al "acceso" y se producirá el periodo normal de tutoría, que implicará una continuación de "Approved by" durante algún tiempo.
+* "Approved by" solo es aceptable para los committers que no están bajo tutoria -- los committers tutelados pueden proporcionar un "Reviewed by", pero no un "Approved by".
+
+[[subversion-primer]]
+== Subversion Primer
+
+Se asume que los nuevos committers están ya familiarizados con el funcionamiento básico de Subversion. Si no es así, comience leyendo el http://svnbook.red-bean.com/[libro de Subversion].
+
+[[svn-intro]]
+=== Introducción
+
+El repositorio del código fuente de FreeBSD migró de CVS a Subversion el 31 de mayo de 2008. El primer commit real del repositorio SVN es _r179447_.
+
+El repositorio `doc/www` de FreeBSD migró de CVS a Subversion el 19 de mayo de 2012. El primer commit real del repositorio SVN es _r38821_.
+
+El repositorio `ports` de FreeBSD migró de CVS a Subversion el 14 de julio de 2012. El primer commit real del repositorio SVN es _r300894_.
+
+Subversion puede instalarse desde la colección de ports de FreeBSD ejecutando el comando:
+
+[source,bash]
+....
+# pkg install subversion
+....
+
+[[svn-getting-started]]
+=== Primeros pasos
+
+Existen varias formas de obtener una copia del árbol del código fuente de Subversion. Esta sección las explicará.
+
+[[svn-getting-started-direct-checkout]]
+==== Checkout directo
+
+La primera de ellas es hacer un check out directo del repositorio principal. Para el repositorio `src`, use el comando:
+
+[source,bash]
+....
+% svn checkout svn+ssh://repo.freebsd.org/base/head /usr/src
+....
+
+Para el repositorio `doc`, use el comando:
+
+[source,bash]
+....
+% svn checkout svn+ssh://repo.freebsd.org/doc/head /usr/doc
+....
+
+Para el repositorio `ports`, use el comando:
+
+[source,bash]
+....
+% svn checkout svn+ssh://repo.freebsd.org/ports/head /usr/ports
+....
+
+[NOTE]
+====
+Aunque los ejemplos que se mostrarán en el resto del documento están escritos teniendo en mente el flujo de trabajo haciendo uso del repositorio `src`, los conceptos son los mismos para trabajar con los repositorios de `doc` y `ports`. Las acciones de Subversion relacionadas con los ports se enumeran en <<ports>>.
+====
+
+El comando anterior realizará un check out de `CURRENT` en el directorio [.filename]#/usr/src/#, el cual puede ser cualquier directorio en el sistema de archivos local. Omitir el argumento final del comando hará que el directorio, en este caso, se denomine "head", pero se puede renombrar sin ningún problema.
+
+`svn+ssh` significa que el protocolo SVN se ejecutará mediante un tunel sobre SSH. El nombre del servidor es `repo.freebsd.org`, `base` es la ruta al repositorio y `head` es el subdirectorio dentro del repositorio.
+
+Si su nombre de login en FreeBSD es diferente al nombre utilizado para iniciar sesión en su ordenador local, inclúyalo en la URL (por ejemplo `svn+ssh://jarjar@repo.freebsd.org/base/head`), o agregue una entrada en el archivo [.filename]#~/.ssh/config# con el siguiente formato:
+
+[.programlisting]
+....
+Host repo.freebsd.org
+	User jarjar
+....
+
+Este es el método más simple, pero es difícil saber qué carga generará en el repositorio.
+
+[NOTE]
+====
+El comando `svn diff` no requiere acceso al servidor, ya que SVN almacena una copia de referencia de cada archivos en la copia de trabajo local. Sin embargo, esto significa que las copias de trabajo locales de Subversion tienen un tamaño muy grande.
+====
+
+[[svn-getting-started-base-layout]]
+==== Ramas `RELENG_*` y estructura general
+
+En `svn+ssh://repo.freebsd.org/base`, _base_ hace referencia al árbol del código fuente. Del mismo modo, ports hace referencia al árbol del código fuente de los _ports_, y así sucesivamente. Estos repositorios están separados, cada uno con sus propias secuencias númericas de cambios, controles de acceso y correo electrónico de confirmación.
+
+Para el repositorio base, HEAD se refiere al árbol -CURRENT. Por ejemplo, [.filename]#head/bin/ls# es lo que iría en [.filename]#/usr/src/bin/ls# en una versión. Algunas de las ubicaciones clave son:
+
+* /head/ hace referencia a `HEAD`, también conocido como `-CURRENT`.
+* /stable/n hace referencia a `RELENG_n`.
+* /releng/n.n hace referencia a `RELENG_n_n`.
+* /release/n.n.n hace referencia a `RELENG_n_n_n_RELEASE`.
+* /vendor* es la rama de trabajo en al cual importar software de otros proyectos. El directorio en si no contiene ramas, sin embargo, sus subdirectorios sí. Esto contrasta con los directorios _stable_, _releng_ y _release_.
+* /projects y /user cuentan con un área de trabajo en ramas. Como antes, el directorio _/user_ no contiene ramas en sí.
+
+[[svn-getting-started-doc-layout]]
+==== Ramas y estructura del proyecto de documentación de FreeBSD
+
+En `svn+ssh://repo.freebsd.org/doc`, _doc_ hace referencia a la raíz del repositorio.
+
+En general, la mayor parte del trabajo del proyecto de documentación de FreeBSD se realiza en la rama [.filename]#head/# del repositorio de documentación.
+
+La documentación de FreeBSD está escrita y/o traducida a varios idiomas, cada uno separado en un directorio en la rama [.filename]#head/#.
+
+Cada conjunto de traducciones contiene varios subdirectorios para las distintas partes del proyecto de documentación de FreeBSD. Algunos de los directorios más importantes son:
+
+* _/articles/_ contiene el código fuente de los artículos escritos por varios colaboradores de FreeBSD.
+* _/books/_ contiene el código fuente de los diferentes libros, como el Handbook de FreeBSD.
+* _/htdocs/_ contiene el código fuente del sitio web de FreeBSD.
+
+[[svn-getting-started-ports-layout]]
+==== Ramas y estructura del árbol de ports de FreeBSD
+
+En `svn+ssh://repo.freebsd.org/ports`, _ports_ hace referencia a la raíz del repositorio de ports.
+
+En general, la mayor parte del trabajo en la colección de ports de FreeBSD se realizará en la rama [.filename]#head/#, que es el árbol de ports que se utiliza para instalar software. Algunas otras ubicaciones clave son:
+
+* /branches/RELENG_n_n_n la cual hace referencia a `RELENG_n_n_n` se utilizan para hacer el merge de actualizaciones de seguridad para su posterior release.
+* /tags/RELEASE_n_n_n la cual hace referencia a `RELEASE_n_n_n` representa un tag en el repositorio de ports.
+* /tags/RELEASE_n_EOL representa de end of life tag de una rama especifica de FreeBSD.
+
+[[svn-daily-use]]
+=== Uso diario
+
+Esta sección explicará cómo realizar operaciones diarias comunes con Subversion.
+
+[[svn-daily-use-help]]
+==== Ayuda
+
+SVN tiene ayuda incorporada. Puede acceder a ella ejecutando el comando:
+
+[source,bash]
+....
+% svn help
+....
+
+Puede encontrar información adicional en http://svnbook.red-bean.com/[el libro de Subversion].
+
+[[svn-daily-use-checkout]]
+==== Checkout
+
+Como se ha visto antes, para hacer un checkout de la rama head de FreeBSD:
+
+[source,bash]
+....
+% svn checkout svn+ssh://repo.freebsd.org/base/head /usr/src
+....
+
+En algún momento, probablemente será útil no sólo `HEAD`, por ejemplo cuando se fusionen los cambios a stable/7. Por lo tanto, puede ser útil tener una comprobación parcial del árbol completo (una comporobación completa sería muy trabajoso).
+
+Para hacer esto, primero compruebe la raíz del repositorio:
+
+[source,bash]
+....
+% comprobación de svn --depth=inmediata svn+ssh://repo.freebsd.org/base
+....
+
+Esto dará `base` con todos los archivos que contiene (en este momento, sólo [.filename]#ROADMAP.txt#) y subdirectorios vacíos para `head`, `stable`, `vendor`, etc.
+
+Es posible extender la copia de trabajo. Basta con cambiar la profundidad de los diferentes subdirectorios:
+
+[source,bash]
+....
+% svn up --set-depth=infinity base/head
+% svn up --set-depth=immediates base/release base/releng base/stable
+....
+
+El comando anterior bajará una copia completa de `head`, más copias vacías de cada etiqueta `release`, cada rama `releng` y cada rama `stable`.
+
+Si en una fecha posterior se requiere fusionar a `7-STABLE`, extienda la copia de trabajo:
+
+[source,bash]
+....
+% svn up --set-depth=infinity base/stable/7
+....
+
+No es necesario extender completamente los subárboles. Por ejemplo, expandiendo sólo `stable/7/sys` y luego expandiendo el resto de `stable/7`:
+
+[source,bash]
+....
+% svn up --set-depth=infinity base/stable/7/sys
+% svn up --set-depth=infinity base/stable/7
+....
+
+Actualizar el árbol con `svn update` sólo actualizará lo que se solicitó previamente (en este caso, `head` y `stable/7`; no bajará todo el árbol.
+
+[[svn-daily-use-anonymous-checkout]]
+==== Comprobación anónima
+
+Es posible comprobar anónimamente el repositorio de FreeBSD con Subversion. Esto dará acceso a un árbol de sólo lectura que puede ser actualizado, pero que no puede ser enviado de vuelta al repositorio principal. Para ello, utilic
+
+[source,bash]
+....
+% svn co https://svn.FreeBSD.org/base/head /usr/src
+....
+
+Puede encontrar más detalles sobre el uso de Subversion de esta forma en link:{handbook}#svn[Usando Subversion].
+
+[[svn-daily-use-updating-the-tree]]
+==== Actualización del árbol
+
+Para actualizar una copia de trabajo a la última revisión, o a una revisión específica:
+
+[source,bash]
+....
+% svn update
+% svn update -r12345
+....
+
+[[svn-daily-use-status]]
+==== Estado
+
+Para ver los cambios locales que se han hecho en la copia de trabajo:
+
+[source,bash]
+....
+% svn status
+....
+
+Para mostrar los cambios locales y los archivos que están desactualizados haga lo siguiente:
+
+[source,bash]
+....
+% svn status --show-updates
+....
+
+[[svn-daily-use-editing-and-committing]]
+==== Editando y Enviando
+
+No es necesario avisar de con antelación a SVN sobre la edición de archivos.
+
+Para incorporar todos los cambios en el directorio actual y en todos los subdirectorios:
+
+[source,bash]
+....
+% svn commit
+....
+
+Para enviar todos los cambios a, por ejemplo, [.filename]#lib/libfetch/# y [.filename]#usr/bin/fetch/# en una sola operación:
+
+[source,bash]
+....
+% svn commit lib/libfetch usr/bin/fetch
+....
+
+También hay una capa protectora para los envíos para que el árbol de ports maneje las propiedades y comprobar el buen estado de los cambios:
+
+[source,bash]
+....
+% /usr/ports/Tools/scripts/psvn commit
+....
+
+[[svn-daily-use-adding-and-removing]]
+==== Adición y eliminación de archivos
+
+[NOTE]
+====
+Antes de añadir un archivo, consiga una copia de https://people.FreeBSD.org/~peter/auto-props.txt[auto-props.txt] (también hay un https://people.FreeBSD.org/~beat/cvs2svn/auto-props.txt[ ports tree specific version]) y añádalo a [.filename]#~/.subversion/config# de acuerdo con las instrucciones del archivo. Si añadió algo antes de leer esto, use `svn rm --keep-local` para los archivos añadidos, arregle su archivo de configuración y añadalos de nuevo. El archivo inicial de configuración se crea cuando ejecuta por primera vez el comando svn, incluso algo tan simple como `svn help`.
+====
+
+Los archivos se añaden al repositorio SVN con `svn add`. Para añadir un archivo con nombre _foo_, edítelo y después: 
+
+[source,bash]
+....
+% svn add foo
+....
+
+[NOTE]
+====
+
+La mayoría de los nuevos archivos fuente deben incluir una cadena `$FreeBSD$` cerca del inicio del archivo. En el envío, `svn` expandirá la cadena `$FreeBSD$`, añadiendo la ruta del archivo, el número de revisión, la fecha y la hora de la confirmación, y el nombre de usuario del committer. Los archivos que no se pueden modificar se pueden enviar sin la cadena `$FreeBSD$`.
+====
+
+Los archivos se pueden eliminar con `svn remove`:
+
+[source,bash]
+....
+% svn add foo
+....
+
+Subversion no requiere borrar el fichero antes de usar `svn rm`, y de hecho se queja si eso ocurre
+
+Es posible añadir directorios con `svn add`:
+
+[source,bash]
+....
+% mkdir bar
+% svn add bar
+....
+
+Aunque `svn mkdir` lo hace más fácil al combinar la creación del directorio y la adición del mismo:
+
+[source,bash]
+....
+% svn mkdir bar
+....
+
+Al igual que los archivos, los directorios se eliminan con `svn rm`. No hay un comando separado específicamente para eliminar directorios.
+
+[source,bash]
+....
+% svn rm bar
+....
+
+[[svn-daily-use-copying-and-moving]]
+==== Copiar y mover archivos
+
+Este comando crea una copia de [.filename]#foo.c# llamado [.filename]#bar.c#, con el nuevo archivo también bajo control de versiones y con el historial completo de [.filename]#foo.c#:
+
+[source,bash]
+....
+% svn copy foo.c bar.c
+....
+
+Esto suele ser preferible a copiar el fichero con `cp` y añadirlo al repositorio con `svn add` porque de esta forma el nuevo fichero no hereda la historia del original.
+
+Para mover y renombrar un archivo:
+
+[source,bash]
+....
+% svn move foo.c bar.c
+....
+
+[[svn-daily-use-log-and-annotate]]
+==== Registro y anotación
+
+`svn log` muestra las revisiones y los mensajes de los commits, los más recientes primero, para archivos o directorios. Cuando se utiliza en un directorio, se muestran todas las revisiones que afectaron al directorio y se muestran los ficheros dentro de ese directorio.
+
+`svn annotate`, o igualmente `svn praise` o `svn blame`, muestra el número de revisión más reciente y quién ha enviado dicha revisión para cada línea de un fichero.
+
+[[svn-daily-use-diffs]]
+==== Diferencias
+
+`svn diff` muestra los cambios en la copia de trabajo. Las diferencias generadas por SVN son unificadas e incluyen nuevos archivos por defecto en la salida de las diferencias.
+
+`svn diff` puede mostrar los cambios entre dos revisiones del mismo fichero:
+
+[source,bash]
+....
+% svn diff -r179453:179454 ROADMAP.txt
+....
+
+También puede mostrar todos los cambios para un conjunto de cambios específico. Este comando muestra qué cambios se hicieron en el directorio actual y en todos los subdirectorios en el conjunto de cambios 179454:
+
+[source,bash]
+....
+% svn diff -c179454 .
+....
+
+[[svn-daily-use-reverting]]
+==== Revertir
+
+Los cambios locales (incluyendo adiciones y eliminaciones) pueden revertirse usando `svn revert`. No actualiza los archivos desactualizados, sino que los reemplaza con copias prístinas de la versión original.
+
+[[svn-daily-use-conflicts]]
+==== Conflictos
+
+Si un `svn update` provocó un conflicto de fusión, Subversion recordará qué ficheros tienen conflictos y se negará a hacer cualquier cambio en esos ficheros hasta que se le diga explícitamente que los conflictos se han resueltos. El procedimiento simple, que aún no está obsoleto, es:
+
+[source,bash]
+....
+% svn resolved foo
+....
+
+Sin embargo, el procedimiento preferido es:
+
+[source,bash]
+....
+% svn resolve --accept=working foo
+....
+
+Los dos ejemplos son equivalentes. Los valores posibles para `--accept` son:
+
+* `working`: utilice la versión de su directorio de trabajo (que se supone ha sido editada para resolver los conflictos).
+* `base`: utilice una copia virgen de la versión que tenía antes de `svn update`, descartando sus propios cambios, los cambios conflictivos, y posiblemente otros cambios intermedios también.
+* `mine-full`: use lo que tenía antes de `svn update`, incluyendo sus propios cambios, pero descartando los cambios conflictivos, y posiblemente otros cambios interpuestos también.
+* `theirs-full`: usa la versión que fue recuperada cuando hizo `svn update`, descartando sus propios cambios.ll.
+
+=== Uso Avanzado.
+
+[[svn-advanced-use-sparse-checkouts]]
+==== Comprobaciones Escasas
+
+SVN permite comprobaciones _escasas_, o parciales de un directorio añadiendo `--depth` a un `svn checkout`.
+
+Los argumentos válidos para `--depth` son:
+
+* `empty`: el propio directorio sin ninguno de sus contenidos.
+* `files`: el directorio y cualquier archivo que contenga.
+* `immediates`: el directorio y todos los archivos y directorios que contenga, pero ninguno de los contenidos de los subdirectorios.
+* `infinity`: cualquier cosa.
+
+La opción `--depth` se aplica a muchos otros comandos, incluyendo `svn commit`, `svn revert`, y `svn diff`.
+
+Como `--depth` es pegadizo, hay una opción `--set-depth` para `svn update` que cambiará la profundidad seleccionada. Así, dada la copia de trabajo producida por el ejemplo anterior:
+
+[source,bash]
+....
+% cd ~/freebsd
+% svn update --set-depth=immediates .
+....
+
+El comando anterior rellenará la copia de trabajo en _~/freebsd_ con [.filename]#ROADMAP.txt# y subdirectorios vacíos, y no pasará nada cuando se ejecute `svn update` en los subdirectorios. Sin embargo, este comando establecerá la profundidad de _head_ (en este caso) al infinito, y lo rellenará completamente:
+
+[source,bash]
+....
+% svn update --set-depth=infinity head
+....
+
+[[svn-advanced-use-direct-operation]]
+==== Operación directa
+
+Algunas operaciones pueden realizarse directamente en el repositorio sin tocar la copia de trabajo. Específicamente, esto se aplica a cualquier operación que no requiera la edición de un archivo, incluyendo:
+
+* `log`, `diff`
+* `mkdir`
+* `eliminar`, `copiar`, `renombrar`
+* `propset`, `propedit`, `propdel`
+* `fusionar`
+
+Crear ramas es muy rápido. Este comando se usaría para crear ramas en `RELENG_8`:
+
+[source,bash]
+....
+% svn copy svn+ssh://repo.freebsd.org/base/head svn+ssh://repo.freebsd.org/base/stable/8
+....
+
+Esto es equivalente a estos comandos que requieren minutos y horas en lugar de segundos, dependiendo de su conexión de red:
+
+[source,bash]
+....
+% svn checkout --depth=immediates svn+ssh://repo.freebsd.org/base
+% cd base
+% svn update --set-depth=infinity head
+% svn copy head stable/8
+% svn commit stable/8
+....
+
+[[svn-advanced-use-merging]]
+==== Fusión con SVN
+
+Esta sección trata sobre la fusión de código de una rama a otra (típicamente, de desde head a una rama estable
+
+[NOTE]
+====
+En todos los ejemplos siguientes, `$FSVN` se refiere a la ubicación del repositorio Subversion de FreeBSD, `svn+ssh://repo.freebsd.org/base/`.
+====
+
+===== Acerca del Seguimiento de Fusiones
+
+Desde la perspectiva del usuario, la información de seguimiento de fusiones (o mergeinfo) se almacena en una propiedad llamada `svn:mergeinfo`, que es una lista separada por comas de las revisiones y los rangos de revisiones que se han fusionado. Cuando se establece en un archivo, se aplica sólo a ese archivo. Cuando se establece en un directorio, se aplica a ese directorio y a sus descendientes (archivos y directorios) excepto a aquellos que tienen su propio `svn:mergeinfo`.
+
+_No_ se hereda. Por ejemplo, [.filename]#estable/6/contrib/openpam/# no hereda implícitamente la información de fusión de [.filename]#estable/6/#, o [.filename]#estable/6/contrib/#. Si lo hiciera, las comprobaciones parciales serían muy difíciles de gestionar. En su lugar, mergeinfo se propaga explícitamente por el árbol. Para fusionar algo en [.filename]#rama/foo/bar/#, se aplican estas reglas:
+
+. Si [.filename]#branch/foo/bar/# no tiene ya un registro mergeinfo, pero sí un ancestro directo (por ejemplo, [.filename]#branch/foo/#), entonces ese registro se propagará hasta [.filename]#branch/foo/bar/# antes de que se registre la información sobre la fusión actual.
+. La información sobre la fusión actual _no_ se propagará de vuelta a ese ancestro.
+. Si un descendiente directo de [.filename]#branch/foo/bar/# (por ejemplo, [.filename]#branch/foo/bar/baz/#) ya tiene un registro de información de fusión, la información sobre la fusión actual se propagará hasta él.
+
+Si considera el caso en el que una revisión cambia varias partes separadas del árbol (por ejemplo, [.filename]#rama/foo/bar/# y [.filename]#rama/foo/quux/#), pero sólo desea fusionar algunas de ellas (por ejemplo, [.filename]#rama/rama/foo/bar/#), verá que estas reglas son razonables. Si se propagó mergeinfo, parecería que esa revisión también se había fusionado a [.filename]#branch/foo/quux/#, cuando en realidad no lo había sido.
+
+[[merge-source]]
+===== Selección de la rama de origen y de destino al fusionar
+
+La fusión con ramas `estables/` debería originarse desde `head/`. Por ejemplo:
+
+[source,bash]
+....
+% svn merge -c r123456 ^/head/ stable/11
+% svn commit stable/11
+....
+
+Las fusiones con ramas `releng/` siempre deben originarse en la rama `estable/` correspondiente. Por ejemplo:
+
+[source,bash]
+....
+% svn merge -c r123456 ^/stable/11  releng/11.0
+% svn commit releng/11.0
+....
+
+[NOTE]
+====
+Los committers sólo pueden comprometerse con las ramas `releng/` durante un ciclo de liberación después de recibir la aprobación del Equipo de Ingenieros de Liberación, después de lo cual sólo el responsable de seguridad puede comprometerse con una rama `releng/` para un Aviso de Seguridad o Una Notificación de Errata.
+====
+
+Todas las fusiones se fusionan y confirman desde la raíz de la rama. Todas las fusiones se parecen a:
+
+[source,bash]
+....
+% svn merge -c r123456 ^/head/ checkout
+% svn commit checkout
+....
+
+Tenga en cuenta que la _comprobación_ debe ser una comprobación completa de la rama con la que se produce la fusión.
+
+[source,bash]
+....
+% svn merge -c r123456 ^/stable/10 releng/10.0
+....
+
+===== Preparación del Destino de la Fusión
+
+Because of the mergeinfo propagation issues described earlier, it is very important to never merge changes into a sparse working copy. Always use a full checkout of the branch being merged into. For instance, when merging from HEAD to 7, use a full checkout of stable/7:
+
+[source,bash]
+....
+% cd stable/7
+% svn up --set-depth=infinity
+....
+
+El directorio de destino también debe estar actualizado y no debe contener ningún cambio no enviado ni archivos perdidos.
+
+===== Identificación de revisiones
+
+Es necesario identificar las revisiones que se van a fusionar. Si el objetivo ya ha completado mergeinfo, pida una lista a SVN:
+
+[source,bash]
+....
+% cd stable/6/contrib/openpam
+% svn mergeinfo --show-revs=eligible $FSVN/head/contrib/openpam
+....
+
+Si el objetivo no ha completado mergeinfo, compruebe el registro de la fuente de la fusión.
+
+===== Fusión
+
+Ahora, ¡vamos a empezar a fusionar!
+
+====== Los Principios
+
+Por ejemplo, Fusionar:
+
+* revisión `$R`
+* en el directorio $target en la rama estable $B
+* desde el directorio $source en head
+* $FSVN es `svn+ssh://repo.freebsd.org/base`
+
+Asumiendo que las revisiones $P y $Q ya han sido fusionadas, y que el directorio actual es una copia de trabajo actualizada de stable/$B, el mergeinfo existente se ve así:
+
+[source,bash]
+....
+% svn propget svn:mergeinfo -R $target
+$target - /head/$source:$P,$Q
+....
+
+La fusión se hace así:
+
+[source,bash]
+....
+% svn merge -c$R $FSVN/head/$source $target
+....
+
+Es posible comprobar los resultados de esto con `svn diff`.
+
+El svn:mergeinfo ahora se parece a:
+
+[source,bash]
+....
+% svn propget svn:mergeinfo -R $target
+$target - head/$source:$P,$Q,$R
+....
+
+Si los resultados no son exactamente los que se muestran, puede ser necesaria la ayuda antes de hacer los envíos, o puede haber algo mal con el mergeinfo existente, o puede haber un error en Subversion.
+
+====== Ejemplo práctico
+
+Como ejemplo práctico, considere este escenario. Los cambios a [.filename]#netmap.4# en r238987 deben fusionarse desde CURRENT a 9-STABLE. El archivo reside en [.filename]#head/share/man/man4#. De acuerdo con <<svn-advanced-use-merging>>, aquí es donde hacer también la fusión. Tenga en cuenta que en este ejemplo todas las rutas son relativas al nivel superior del repositorio svn. Para más información sobre la disposición del directorio, véase <<svn-getting-started-base-layout>>.
+
+El primer paso es inspeccionar el mergeinfo existente.
+
+[source,bash]
+....
+% svn propget svn:mergeinfo -R stable/9/share/man/man4
+....
+
+Take a quick note of how it looks before moving on to the next step; doing the actual merge:
+
+[source,bash]
+....
+% svn merge -c r238987 svn+ssh://repo.freebsd.org/base/head/share/man/man4 stable/9/share/man/man4
+--- Merging r238987 into 'stable/9/share/man/man4':
+U    stable/9/share/man/man4/netmap.4
+--- Recording mergeinfo for merge of r238987 into
+'stable/9/share/man/man4':
+ U   stable/9/share/man/man4
+....
+
+Compruebe que se ha añadido el número de revisión de la revisión fusionada. Una vez verificado esto, lo único que queda es el envío real.
+
+[source,bash]
+....
+% svn commit stable/9/share/man/man4
+....
+
+===== Precauciones antes de los Envíos
+
+Como siempre, construye el mundo (o partes apropiadas del mismo).
+
+Compruebe los cambios con `svn diff` y `svn stat`. Asegúrese de que todos los archivos que deberían haber sido añadidos o borrados hayan sido realmente añadidos o borrados.
+
+Eche un vistazo con más atención a cualquier cambio de propiedad (marcado con un `M` en la segunda columna de `svn stat`). Normalmente, ninguna propiedad de svn:mergeinfo debería estar en otro lugar excepto en el directorio (o directorios) de destino.
+
+Si algo parece sospechoso, pida ayuda.
+
+===== Enviando
+
+Asegúrese de enviar a un directorio de nivel superior para incluir también el mergeinfo. No especifique archivos individuales en la línea de comandos. Para obtener más información sobre el envío de archivos en general, consulte la sección pertinente de este manual.
+
+[[svn-advanced-use-vendor-imports]]
+==== Importaciones de vendor con SVN
+
+[IMPORTANT]
+====
+Por favor, lea toda esta sección antes de iniciar la importación de vendor.
+====
+
+[NOTE]
+====
+Los parches al código de vendor se dividen en dos categorías:
+
+* Parches de vendor: son parches que han sido publicados por vendor, o que han sido extraídos del sistema de control de versiones de vendor, que resuelven problemas que no pueden esperar hasta la próxima versión de vendor.
+* Parches de FreeBSD: son parches que modifican el código de vendor para resolver problemas específicos de FreeBSD.
+
+La naturaleza de un parche dicta dónde debe ser enviado:
+
+* Los parches de vendor deben enviarse a la rama de vendor y fusionarse de allí a head. Si el parche resuelve un problema en una nueva versión que se está importando actualmente, _no debe_ ser eviado junto con la nueva versión: la versión se debe importar y etiquetar primero, entonces el parche se puede aplicar y enviar. No hay necesidad de volver a etiquetar las fuentes de vendor después de confirmar el parche.
+* Los parches de FreeBSD se envían directamente a head.
+====
+
+===== Preparación del Árbol
+
+Si importa por primera vez después del cambio a Subversion, es necesario aplanar y limpiar el árbol de vendor, así como realizar un inicio del historial de fusiones en el árbol principal.
+
+====== Aplanar
+
+Durante la conversión de CVS a Subversion, las ramas de vendor se importaron con el mismo esquema que el árbol principal. Esto significa que las fuentes de vendor `pf` terminaron en [.filename]#vendor/pf/dist/contrib/pf#. La fuente de vendor es mejor si está directamente en [.filename]#vendor/pf/dist#.
+
+Para aplanar el árbol `pf`:
+
+[source,bash]
+....
+% cd vendor/pf/dist/contrib/pf
+% svn mv $(svn list) ../..
+% cd ../..
+% svn rm contrib
+% svn propdel -R svn:mergeinfo .
+% svn commit
+....
+
+El bit `propdel` es necesario porque comenzando con 1.5, Subversion se añade automáticamente `svn:mergeinfo` a cualquier directorio que se copie o mueva. En este caso, como no se está fusionando nada del árbol eliminado, simplemente es un estorbo.
+
+Las etiquetas también pueden ser aplanadas (3, 4, 3.5 etc.); el procedimiento es exactamente el mismo, sólo cambiando `dist` a `3.5` o similar, y posponiendo el `svn commit` hasta el final del proceso.
+
+====== Limpieza
+
+El árbol `dist` puede ser limpiado según sea necesario. Se recomienda desactivar la expansión de palabras clave, ya que no tiene sentido en el código de vendor que no se ha modificado y en algunos casos puede incluso ser perjudicial. OpenSSH, por ejemplo, incluye dos ficheros que se originaron en FreeBSD y que aún contienen las etiquetas de la versión original. Para hacer esto:
+
+[source,bash]
+....
+% svn propdel svn:keywords -R .
+% svn commit
+....
+
+====== Iniciando el Historial de Fusiones
+
+Si se importa por primera vez después del cambio a Subversion, inicie `svn:mergeinfo` en el directorio de destino en el árbol principal la revisión que corresponde al último cambio relacionado con el árbol de vendor, antes de importar nuevas fuentes:
+
+[source,bash]
+....
+% cd head/contrib/pf
+% svn merge --record-only svn+ssh://repo.freebsd.org/base/vendor/pf/dist@180876 .
+% svn commit
+....
+
+
+===== Importar nuevas fuentes
+
+Con dos envíos, uno para la importación en sí y otro para la etiqueta, este paso puede repetirse opcionalmente para cada versión anterior entre la última importación y la importación actual.
+
+====== Preparar las Fuentes de Vendor
+
+Subversion es capaz de almacenar una distribución completa en el árbol de vendor. Por lo tanto, importe todo, pero fusione sólo lo que sea necesario.
+
+Se requiere un `svn add` para añadir cualquier archivo que se haya añadido desde la última importación de vendor, y un `svn rm` para eliminar cualquier archivo que se haya eliminado desde entonces. Se recomienda preparar listas clasificadas del contenido del árbol de vendor y de las fuentes que se van a importar para facilitar el proceso.
+
+[source,bash]
+....
+% cd vendor/pf/dist
+% svn list -R | grep -v '/$' | sort >../old
+% cd ../pf-4.3
+% find . -type f | cut -c 3- | sort >../new
+....
+
+Con estos dos archivos, `comm -23 ../old ../new` listará los archivos eliminados (archivos sólo en [.filename]#old#), mientras que `comm -13 ../old ../new` listará los archivos añadidos sólo en [.filename]#new#.
+
+====== Importación al Árbol Vendor
+
+Ahora, las fuentes deben copiarse en [.filename]#dist# y los comandos `svn add` y `svn rm` se utilizan según sea necesario:
+
+[source,bash]
+....
+% cd vendor/pf/pf-4.3
+% tar cf - . | tar xf - -C ../dist
+% cd ../dist
+% comm -23 ../old ../new | xargs svn rm
+% comm -13 ../old ../new | xargs svn add --parents
+....
+
+Si se ha eliminado algún directorio, `svn rm` tendrá que ser editado manualmente. Nada se romperá si no se hace, pero permanecerán en el árbol.
+
+Compruebe las propiedades de cualquier archivo nuevo. Todos los archivos de texto deben tener `svn:eol-style` establecido en `native`. Todos los archivos binarios deben tener `svn:mime-type` ajustado a `application/octet-stream` a menos que exista un tipo de medio más apropiado. Los archivos ejecutables deben tener `svn:ejecutable` establecido en `*`. No debe existir ninguna otra propiedad en ningún archivo del árbol.
+
+Ahora es posible el envio. Sin embargo, es una buena práctica asegurarse de que todo está bien usando los comandos `svn stat` y `svn diff`.
+
+====== Etiquetado
+
+Una vez hecho el envío, las versiones de vendor se etiquetan para referencia futura. La mejor y más rápida manera de hacerlo es directamente en el repositorio:
+
+[source,bash]
+....
+% svn cp svn+ssh://repo.freebsd.org/base/vendor/pf/dist svn+ssh://repo.freebsd.org/base/vendor/pf/4.3
+....
+
+Una vez completado esto, haga `svn up` a la copia de trabajo de [.filename]#vendor/pf# para obtener la nueva etiqueta, aunque esto rara vez es necesario.
+
+Si crea la etiqueta en la copia de trabajo del árbol, debe eliminar los resultados de `svn:mergeinfo`:
+
+[source,bash]
+....
+% cd	vendor/pf
+% svn cp dist 4.3
+% svn propdel svn:mergeinfo -R 4.3
+....
+
+
+===== Fusión con Head
+
+[source,bash]
+....
+% cd head/contrib/pf
+% svn up
+% svn merge --accept=postpone svn+ssh://repo.freebsd.org/base/vendor/pf/dist .
+....
+
+El `--accept=postpone` le dice a Subversion que no se queje de los conflictos de fusión ya que serán manejados manualmente.
+
+[TIP]
+====
+El cambio `cvs2svn` tuvo lugar el 3 de junio de 2008. Al realizar fusiones de vender para paquetes que ya estaban presentes y convertidos por el proceso `cvs2svn`, el comando usado para fusionar [.filename]#/vendedor/nombre_de_paquete/dist# a [.filename]#/head/localización_de_paquete# (por ejemplo, [.filename]#head/contrib/sendmail#) debe usar `-c _REV_` para indicar la revisión para fusionar desde el árbol [.filename]#/vendor#. Por ejemplo:
+
+[source,bash]
+....
+% svn checkout svn+ssh://repo.freebsd.org/base/head/contrib/sendmail
+% cd sendmail
+% svn merge -c r261190 '^/vendor/sendmail/dist' .
+....
+
+`^` es un alias para la ruta del repositorio.
+====
+
+[NOTE]
+====
+Si se utiliza el shell Zsh, el `^` debe ser evitado con `\` o ser entrecomillado.
+====
+
+Es necesario resolver cualquier conflicto de fusión.
+
+Asegúrese de que todos los archivos que se hayan añadido o eliminado en el árbol de vendor se hayan añadido o eliminado correctamente en el árbol principal. Para verificar las diferencias con la rama de vendor:
+
+[source,bash]
+....
+% svn diff --no-diff-deleted --old=svn+ssh://repo.freebsd.org/base/vendor/pf/dist --new=.
+....
+
+El `--no-diff-deleted` le dice a Subversion que no se queje de ficheros que están en el árbol de vendor pero no en el árbol principal. Cosas que previamente se habrían eliminado antes de la importación de vendor, como los makefiles de vendor y los scripts de configuración.
+
+Usando CVS, una vez que un archivo estaba fuera de la rama de vendor, no se podía volver a reestablecer. Con Subversion, no hay ningún concepto de dentro o fuera de la rama de vendor. Si un fichero que antes tenía modificaciones locales, para que no aparezca en diffs en el árbol de vendor, todo lo que hay que hacer es eliminar cualquier cruft sobrante como las etiquetas de la versión de FreeBSD, lo que es mucho más fácil.
+
+Si se requiere algún cambio para que el mundo construya con las nuevas fuentes, hágalo ahora y siga probando hasta que todo se construya y funcione perfectamente.
+
+===== Enviando la importación de vendor
+
+Ahora es posible hacer el envío! Todo debe ser enviado de una sola vez. Si se hace correctamente, el árbol pasará de un estado consistente con el código antiguo a un estado consistente con el nuevo código.
+
+===== Desde el principio
+
+====== Importación al Árbol Vendor
+
+Esta sección es un ejemplo de importación y etiquetado de byacc en [.filename]#head#.
+
+Primero, prepare el directorio en [.filename]#vendor#:
+
+[source,bash]
+....
+% svn co --depth immediates $FSVN/vendor
+% cd vendor
+% svn mkdir byacc
+% svn mkdir byacc/dist
+....
+
+Ahora, importe las fuentes en el directorio [.filename]#dist#. Una vez que los archivos están en su lugar, `svn add` los nuevos, luego `svn commit` y etiquete la versión importada. Para ahorrar tiempo y ancho de banda, es posible el envío y etiquetado remoto directo.
+
+[source,bash]
+....
+% svn cp -m "Tag byacc 20120115" $FSVN/vendor/byacc/dist $FSVN/vendor/byacc/20120115
+....
+
+====== Fusión con `head`
+
+Debido a que se trata de un nuevo archivo, cópielo para la fusión:
+
+[source,bash]
+....
+% svn cp -m "Import byacc to contrib" $FSVN/vendor/byacc/dist $FSVN/head/contrib/byacc
+....
+
+Todavía es posible trabajar normalmente con fuentes recientemente importadas.
+
+[[svn-advanced-use-reverting-a-commit]]
+==== Anulación de un envío
+
+Revertir un envío a una versión anterior es bastante fácil:
+
+[source,bash]
+....
+% svn merge -r179454:179453 ROADMAP.txt
+% svn commit
+....
+
+También se puede utilizar la sintaxis del cambio de número, significando un número negativo una reversión:
+
+[source,bash]
+....
+% svn merge -c -179454 ROADMAP.txt
+% svn commit
+....
+
+Esto también se puede hacer directamente en el repositorio:
+
+[source,bash]
+....
+% svn merge -r179454:179453 svn+ssh://repo.freebsd.org/base/ROADMAP.txt
+....
+
+[NOTE]
+====
+Es importante asegurarse de que el mergeinfo es correcto al revertir un archivo para permitir que `svn mergeinfo --elegible` funcione como se espera.
+====
+
+Revertir la eliminación de un archivo es ligeramente diferente. Es necesario copiar la versión del fichero anterior al borrado. Por ejemplo, para restaurar un fichero borrado en la revisión N, restaurar la versión N-1:
+
+[source,bash]
+....
+% svn copy svn+ssh://repo.freebsd.org/base/ROADMAP.txt@179454
+% svn commit
+....
+
+o, igualmente:
+
+[source,bash]
+....
+% svn copy svn+ssh://repo.freebsd.org/base/ROADMAP.txt@179454 svn+ssh://repo.freebsd.org/base
+....
+
+Do _not_ simply recreate the file manually and `svn add` it--this will cause history to be lost.
+
+[[svn-advanced-use-fixing-mistakes]]
+==== Corrección de errores
+
+Aunque podemos hacer cirugía en una emergencia, no planee arreglar errores entre bastidores. Planee que los errores permanezcan en los registros para siempre. Asegúrese de comprobar la salida de `svn status` y `svn diff` antes de enviar.
+
+Los errores ocurrirán pero, por lo general, pueden ser corregidos sin perturbaciones.
+
+Tome por caso añadir un archivo en la ubicación equivocada. Lo correcto es `svn move` el archivo a la ubicación correcta y confirmarlo. Esto causa sólo un par de líneas de metadatos en el diario del repositorio, y los registros están todos conectados correctamente.
+
+Lo incorrecto es borrar el archivo y luego `svn add` una copia independiente en la ubicación correcta. En lugar de un par de líneas de texto, el diario del repositorio hace crecer una nueva copia completa del archivo. Esto es un desperdicio.
+
+[[svn-getting-started-checkout-from-a-mirror]]
+==== Usando un Espejo de Subversion
+
+There is a serious disadvantage to this method: every time something is to be committed, a `svn relocate` to the main repository has to be done, remembering to `svn relocate` back to the mirror after the commit. Also, since `svn relocate` only works between repositories that have the same UUID, some hacking of the local repository's UUID has to occur before it is possible to start using it.
+
+[[svn-advanced-checkout-from-mirror]]
+===== Comprobar desde un Espejo
+
+Compruebe una copia de trabajo desde una réplica sustituyendo URL por `svn+ssh://repo.freebsd.org/base`. Puede ser una réplica oficial o una réplica mantenida mediante el uso de `svnsync`.
+
+[[svn-advanced-use-setting-up-svnsync]]
+===== Configuración de una Réplica svnsync.
+
+Evite configurar una réplica svnsync a menos que haya una buena razón para ello. La mayoría de las veces una réplica `git` es una alternativa mejor. Comenzar una réplica nueva desde cero lleva mucho tiempo. Se espera un mínimo de 10 horas para la conectividad de alta velocidad. Si se trata de enlaces internacionales, es de esperar que esto lleve entre cuatro y diez veces más tiempo.
+
+Una forma de limitar el tiempo requerido es tomar un https://download.freebsd.org/ftp/development/subversion/[archivo semilla]. Es grande (~1GB) pero consumirá menos tráfico de red y tardará menos tiempo en obtenerlo que svnsync.
+
+Extraiga el archivo y actualícelo:
+
+[source,bash]
+....
+% tar xf svnmirror-base-r261170.tar.xz
+% svnsync sync file:///home/svnmirror/base
+....
+
+Ahora, configúrelo para que se ejecute desde man:cron[8], realice las comprobaciones localmente, configure un servidor svnserve para que las máquinas locales puedan hablar con él, etc.
+
+La réplica semilla está configurada para obtener desde `svn://svn.freebsd.org/base`. La configuración de la réplica se guarda en `revprop 0` en la réplica local. Para ver la configuración, intente:
+
+[source,bash]
+....
+% svn proplist -v --revprop -r 0 file:///home/svnmirror/base
+....
+
+Use `svn propset` para cambiar cosas.
+
+[[svn-advanced-use-committing-high-ascii-data]]
+==== Enviando Datos High-ASCII.
+
+Los archivos que tienen bits ASCII-high se consideran archivos binarios en SVN, por lo que las comprobaciones previas fallan e indican que la propiedad `mime-type` debe configurarse a `application/octet-stream`. Sin embargo, se desaconseja el uso de esta opción, así que por favor no la configure. La mejor manera es siempre evitar los datos de ASCII-high, para que pueda ser leído en cualquier lugar con cualquier editor de texto, pero si no es posible evitarlo, en lugar de cambiar el tipo mime, establezca la propiedad `fbsd:notbinary` con `propset`:
+
+[source,bash]
+....
+% svn propset fbsd:notbinary yes foo.data
+....
+
+[[svn-advanced-use-maintaining-a-project-branch]]
+==== Mantenimiento de una Rama del Proyecto
+
+Una rama del proyecto es aquella que está sincronizada con head (u otra rama) y se utiliza para desarrollar un proyecto y luego volver a enviarlo a la head. En SVN, "dolphin" se utiliza para esto. Una rama "dolphin" es aquella que se diverge por un tiempo y finalmente se vuelve a enviar a la rama original. Durante el desarollo es código migra en una dirección (de la cabecera a la rama solamente). Ningún código es enviado de nuevo a head hasta el final. Una vez enviada la rama, está muerta (aunque se puede crear una nueva rama con el mismo nombre después de que se haya eliminado la rama muerta).
+
+Según https://people.FreeBSD.org/\~peter/svn_notes.txt[https://people.FreeBSD.org/~peter/svn_notes.txt], el trabajo que se pretende fusionar de vuelta con HEAD debe estar en [.filename]#base/projects/#. Si el trabajo es beneficioso para la comunidad FreeBSD de alguna manera pero no se pretende que se fusione directamente con HEAD, entonces la ubicación correcta es [.filename]#base/user/username/#. https://svnweb.freebsd.org/base/projects/GUIDELINES.txt[This page] contiene más detalles.
+
+Para crear una rama de proyecto:
+
+[source,bash]
+....
+% svn copy svn+ssh://repo.freebsd.org/base/head svn+ssh://repo.freebsd.org/base/projects/spif
+....
+
+Para fusionar los cambios de HEAD de nuevo en la rama del proyecto:
+
+[source,bash]
+....
+% cd copy_of_spif
+% svn merge svn+ssh://repo.freebsd.org/base/head
+% svn commit
+....
+
+Es importante resolver cualquier conflicto de fusión antes de comprometerse.
+
+=== Algunos consejos
+
+En los registros de envíos etc., "rev 179872" se escribe "r179872" según la convención.
+
+Es posible acelerar svn añadiendo estas entradas a [.filename]#~/.ssh/config#:
+
+[source,bash]
+....
+Host *
+ControlPath ~/.ssh/sockets/master-%l-%r@%h:%p
+ControlMaster auto
+ControlPersist yes
+....
+
+y luego escribiendo
+
+[source,bash]
+....
+mkdir ~/.ssh/sockets
+....
+
+Comprobar una copia de trabajo con un cliente stock de Subversion sin parches específicos de FreeBSD (`OPTIONS_SET=FREEBSD_TEMPLATE`) significará que las etiquetas `$FreeBSD$` no se expandirán. Una vez que se ha instalado la versión correcta, engañe a Subversion para que las expanda así:
+
+[source,bash]
+....
+% svn propdel -R svn:keywords .
+% svn revert -R .
+....
+
+Esto eliminará los parches no confirmados.
+
+Es posible rellenar automáticamente los campos de registro de envíos "Patrocinado por" y "MFC después" configurando los campos "freebsd-sponsored-by" y "freebsd-mfc-after" en la sección "[miscellany]" del archivo de configuración [.filename]#~/.subversion/config#. Por ejemplo:
+
+[.programlisting]
+....
+freebsd-sponsored-by = The FreeBSD Foundation
+freebsd-mfc-after = 2 weeks
+....
+
+
+[[conventions]]
+== Configuración, Convenciones y Tradiciones
+
+Hay una serie de cosas que hacer como nuevo desarrollador. La primera serie de pasos es específica para los committers solamente. Estos pasos deben ser realizados por un mentor para aquellos que no son committers.
+
+[[conventions-committers]]
+=== Para los Nuevos Committers
+
+Aquellos a los que se les han concedido derechos de envío a los repositorios de FreeBSD deben seguir estos pasos.
+
+* ¡Obtenga la aprobación de los mentores antes de realizar cada uno de estos cambios!
+* Los archivos [.filename]#.ent# y [.filename]#.xml# mencionados a continuación existen en el repositorio SVN del Proyecto de Documentación de FreeBSD en `svn+ssh://repo.FreeBSD.org/doc/`.
+* Los nuevos ficheros que no tengan la propiedad `FreeBSD=%H svn:keywords` serán rechazados cuando se intente enviarlos al repositorio. Asegúrese de leer <<svn-daily-use-adding-and-removing>> con respecto a la adición y eliminación de archivos. Compruebe que [.filename]#~/.subversion/config# contiene las entradas "auto-props" necesarias de [.filename]#auto-props.txt# mencionadas allí.
+* Todas las confirmaciones [.filename]#src# van primero a FreeBSD-CURRENT antes de ser fusionadas con FreeBSD-STABLE. La rama FreeBSD-STABLE debe mantener la compatibilidad ABI y API con versiones anteriores de esa rama. No fusione los cambios que rompan esta compatibilidad.
+
+[[commit-steps]]
+[.procedure]
+.Procedure: Pasos para los Nuevos Committers
+. Añadir una Entidad de Autor
++ 
+[.filename]#doc/head/share/xml/authors.ent# -- Añadir una entidad de autor. Los pasos posteriores dependen de esta entidad, y la falta de este paso hará que el proceso de construcción de [.filename]#doc/# falle. Esta es una tarea relativamente fácil, pero sigue siendo una buena primera prueba de las habilidades acerca del control de versiones.
+. Actualizar la lista de Desarrolladores y Colaboradores
++ 
+[.filename]#doc/head/en_US.ISO8859-1/articles/contributors/contrib.committers.xml# -- Añada una entrada a la sección "Desarrolladores" de la link:{contributors}#staff-committers[Lista de colaboradores]. Las entradas están ordenadas por apellido.
++ 
+[.filename]#doc/head/en_US.ISO8859-1/articles/contributors/contrib.additional.xml# -- _Elimine_ la entrada de la sección "Colaboradores Adicionales". Las entradas se clasifican por nombre.
+. Añadir una entrada de Novedades
++ 
+[.filename]#doc/head/share/xml/news.xml# -- Añadir una entrada. Busque las otras entradas que anuncian nuevos committers y siga el formato. Use la fecha del correo electrónico de aprobación de mailto:core@FreeBSD.org[core@FreeBSD.org].
+. Agregue una clave PGP
++ 
+[.filename]#doc/head/share/pgpkeys/pgpkeys.ent# y [.filename]#doc/head/share/pgpkeys/pgpkeys-developers.xml# - Añada su clave PGP o GnuPG. Aquellos que aún no tienen una clave deben ver <<pgpkeys-creating>>.
++ 
+Dag-Erling Smørgrav mailto:des@FreeBSD.org[des@FreeBSD.org] ha escrito un script ([.filename]#doc/head/share/pgpkeys/addkey.sh#) para hacer esto más fácil. Para más información, consulte el archivo http://svnweb.FreeBSD.org/doc/head/share/pgpkeys/README[README].
++ 
+Utilice [.filename]#doc/head/share/pgpkeys/checkkey.sh# para verificar que las claves cumplen con los estándares mínimos de mejores prácticas.
++ 
+Después de añadir y comprobar una clave, añada ambos archivos actualizados al control de fuente y, a continuación, confírmelos. Las entradas en este archivo están ordenadas por apellido.
++
+[NOTE]
+====
+Es muy importante tener una clave PGP/GnuPG actualizada en el repositorio. La clave puede ser necesaria para la identificación positiva de un committer. Por ejemplo, los administradores de FreeBSD mailto:admins@FreeBSD.org[admins@FreeBSD.org] podrían necesitarlo para recuperar la cuenta. Un juego de llaves completo de los usuarios de `FreeBSD.org` está disponible para su descarga en link:https://www.FreeBSD.org/doc/pgpkeyring.txt[https://www.FreeBSD.org/doc/pgpkeyring.txt].
+====
+
+. Actualizar la Información del Mentor y del Aprendiz.
++ 
+[.filename]#base/head/share/misc/committers-repositorio.dot# -- Añada una entrada a la sección actual de committers, donde _repositorio_ es `doc`, `ports`, o `src`, dependiendo de los privilegios concedidos al envío.
++ 
+Agregue una entrada para cada relación adicional de mentor/aprendiz en la sección inferior.
+. Generar una Contraseña Kerberos
++ 
+Vea <<kerberos-ldap>> para generar o configurar un Kerberos para su uso con otros servicios de FreeBSD como la base de datos de seguimiento de errores.
+. Opcional: Habilitar Cuenta Wiki
++ 
+https://wiki.freebsd.org[FreeBSD Wiki] Cuenta - Una cuenta wiki permite compartir proyectos e ideas. Aquellos que aún no tienen una cuenta pueden seguir las instrucciones en el https://wiki.freebsd.org/AboutWiki[Página AboutWiki] para obtener una. Contacte con mailto:wiki-admin@FreeBSD.org[wiki-admin@FreeBSD.org] si necesita ayuda con su cuenta Wiki.
+. Opcional: Actualizar la Información de la Wiki
++ 
+Información Wiki - Después de acceder al wiki, algunas personas añaden entradas a las páginas https://wiki.freebsd.org/HowWeGotHere[Cómo llegamos aquí], https://wiki.freebsd.org/IRC/Nicknames[IRC Nicks], y https://wiki.freebsd.org/Community/Dogs[ Dogs of FreeBSD].
+. Opcional: Actualizar Puertos con Información Personal
++ 
+[.filename]#ports/astro/xearth/files/freebsd.committers.markers# y [.filename]#src/usr.bin/calendar/calendars/calendar.freebsd# - Algunas personas añaden entradas para sí mismas a estos archivos para mostrar dónde se encuentran o la fecha de su cumpleaños.
+. Opcional: Prevenir Correos Duplicados
++ 
+Los suscriptores de http://lists.FreeBSD.org/mailman/listinfo/svn-src-all[svn-src-all], http://lists.FreeBSD.org/mailman/listinfo/svn-ports-all[svn-ports-all] o a http://lists.FreeBSD.org/mailman/listinfo/svn-doc-all[svn-doc-all] podrían darse de baja para evitar recibir copias duplicadas de los mensajes de envíos y seguimiento.
+
+
+[[conventions-everyone]]
+=== Para Todos
+
+[[conventions-everyone-steps]]
+[.procedure]
+. Preséntese a los otros desarrolladores, de lo contrario nadie tendrá idea de quién es usted o en qué está trabajando. La introducción no tiene por qué ser una biografía exhaustiva, sólo tiene que escribir uno o dos párrafos sobre quién es usted, en qué piensa trabajar como desarrollador en FreeBSD y quién será su mentor. Envíe este mensaje a la lista de correo de desarrolladores de FreeBSD y ¡estará en camino!
+. Inicie sesión en `freefall.FreeBSD.org` y cree un archivo [.filename]#/var/forward/usuario# (donde _usuario_ es su nombre de usuario) que contenga la dirección de correo electrónico a la que desea que se reenvíe el correo dirigido a _su nombre de usuario_@FreeBSD.org. Esto incluye todos los mensajes de envío, así como cualquier otro correo dirigido a la lista de correo de committers de FreeBSD y a la lista de correo de los desarrolladores de FreeBSD. Los buzones de correo realmente grandes que han fijado su residencia permanente en `freefall` pueden quedar truncados sin previo aviso si es necesario liberar espacio, así que reenvíelo o guárdelo en otro lugar.
++
+[NOTE]
+====
+Si su sistema de correo electrónico usa SPF con reglas estrictas, debe hacer una lista blanca en `mx2.FreeBSD.org` de las comprobaciones de SPF.
+====
++ 
+Debido a la severa carga que implica el manejo de los lugares de SPAM en los servidores de correo centrales que realizan el procesamiento de las listas de correo, el servidor de entrada realiza algunas comprobaciones básicas y dejará caer algunos mensajes basados en estas comprobaciones. Por el momento, la única comprobación que existe es la información DNS adecuada para el host que se conecta, pero eso puede cambiar. Algunas personas culpan a estos cheques por rebotar correos electrónicos válidos. Para desactivar estas comprobaciones en su correo electrónico, cree un archivo llamado [.filename]#~/.spam_lover# en `freefall.FreeBSD.org`.
+
+[NOTE]
+====
+Aquellos que son desarrolladores pero no son committers no serán suscritos a las listas de correo de committers o desarrolladores. Las suscripciones se derivan de los derechos de acceso.
+====
+
+[[smtp-setup]]
+==== Configuración de acceso SMTP
+
+Para aquellos que deseen enviar mensajes de correo electrónico a través de la infraestructura de FreeBSD.org, sigan las siguientes instrucciones:
+
+[.procedure]
+. Indica a tu cliente de correo en `smtp.FreeBSD.org:587`.
+. Activa STARTTLS.
+. Asegúrate de que tu dirección `Desde:` esté en `yourusername_@FreeBSD.org`.
+. para la autenticación, puede utilizar su nombre de usuario y contraseña de FreeBSD Kerberos (consulte <<kerberos-ldap>>). El `yourusername_mail` Se prefiere principal, ya que solo es válido para autenticarse en los recursos de correo.
++
+[NOTE]
+====
+No incluyas `@FreeBSD.org` al introducir tu nombre de usuario.
+====
+
+.Notas adicionales
+[NOTE]
+====
+* Solo aceptará correo de `_yourusername_@FreeBSD.org`. Si está autenticado como un usuario, no se le permite enviar correo desde otro.
+* Se agregará un encabezado con el nombre de usuario SASL: (`Remitente autenticado:usuario`).
+* El anfitrión tiene varios límites de tasa para reducir los intentos de fuerza bruta.
+====
+
+[[smtp-setup-local-mta]]
+===== Uso de un MTA local para reenviar correos electrónicos al servicio SMTP de FreeBSD.org
+
+También es posible usar un MTA local para reenviar los correos electrónicos enviados localmente a los servidores SMTP de FreeBSD.org.
+
+[[smtp-setup-local-postfix]]
+.Usando Postfix
+[example]
+====
+Para decirle a una instancia de Postfix local que cualquier cosa desde `_usuario_@FreeBSD.org` debe ser reenviado a los servidores de FreeBSD.org, agregue esto a su [.filename]#main.cf#:
+
+[.programlisting]
+....
+sender_dependent_relayhost_maps = hash:/usr/local/etc/postfix/relayhost_maps
+smtp_sasl_auth_enable = yes
+smtp_sasl_security_options = noanonymous
+smtp_sasl_password_maps = hash:/usr/local/etc/postfix/sasl_passwd
+smtp_use_tls = yes
+....
+
+Crear [.filename]#/usr/local/etc/postfix/relayhost_maps# con el siguiente contenido:
+
+[.programlisting]
+....
+yourusername@FreeBSD.org  [smtp.freebsd.org]:587
+....
+
+Crear [.filename]#/usr/local/etc/postfix/sasl_passwd# con el siguiente contenido:
+
+[.programlisting]
+....
+[smtp.freebsd.org]:587          yourusername:yourpassword
+....
+
+Si otras personas utilizan el servidor de correo electrónico, es posible que desee evitar que envíen correos electrónicos desde su dirección. Para lograr esto, agregue esto a su [.filename]#main.cf#:
+
+[.programlisting]
+....
+smtpd_sender_login_maps = hash:/usr/local/etc/postfix/sender_login_maps
+smtpd_sender_restrictions = reject_known_sender_login_mismatch
+....
+
+Crear [.filename]#/usr/local/etc/postfix/sender_login_maps# con el siguiente contenido:
+
+[.programlisting]
+....
+yourusername@FreeBSD.org yourlocalusername
+....
+
+Donde _yourlocalusername_ es el SASL nombre de usuario utilizado para conectarse a la instancia local de Postfix.
+====
+
+[[mentors]]
+=== Mentores
+
+Todos los nuevos desarrolladores tienen un mentor asignado durante los primeros meses. Un mentor es responsable de enseñar a los alumnos las reglas y convenciones del proyecto y de guiar sus primeros pasos en la comunidad de desarrolladores. El mentor también es personalmente responsable de las acciones de los aprendices durante este período inicial.
+
+Para los committers: no envíen nada sin obtener primero la aprobación del mentor. Documente esa aprobación con una línea `Aprobado por:` en el mensaje de confirmación.
+
+Cuando el mentor decide que un aprendiz ha aprendido las reglas y está listo para hacer envíos por su cuenta, el mentor lo anuncia con un envío de [.filename]#conf/mentors#. Este archivo está en la rama [.filename]#svnadmin# de cada repositorio:.
+
+[.informaltable]
+[cols="1,1", frame="none"]
+|===
+
+|`src`
+|[.filename]#base/svnadmin/conf/mentors#
+
+|`doc`
+|[.filename]#doc/svnadmin/conf/mentors#
+
+|`ports`
+|[.filename]#ports/svnadmin/conf/mentors#
+|===
+
+Los nuevos comprometidos deben tener como objetivo completar suficientes compromisos para que su mentor se sienta cómodo librándolos de la tutoría durante el primer año. Si todavía están bajo tutoría, el organismo de gestión apropiado (core, doceng o portmgr) debe intentar asegurarse de que no haya barreras que impidan la finalización. Si el confirmador no puede satisfacer a su mentor de preparación por un año y medio, su bit de compromiso puede convertirse en membresía del proyecto.
+
+[[pre-commit-review]]
+== Revisión previa al compromiso
+
+La revisión de código es una forma de aumentar la calidad del software. Las siguientes pautas se aplican a los compromisos con `head` (-CURRENT) rama de la `src` repositorio. Otras ramas y el `ports` y `docs` Los árboles tienen sus propias políticas de revisión, pero estas pautas generalmente se aplican a los compromisos que requieren revisión:
+
+* Todos los cambios no triviales deben ser revisados antes de que se envíen al repositorio.
+* Las revisiones pueden realizarse por correo electrónico, en Bugzilla, enPhabricator, o por otro mecanismo. Siempre que sea posible, las revisiones deben ser públicas.
+* El desarrollador responsable de un cambio de código también es responsable de hacer todos los cambios necesarios relacionados con la revisión.
+* La revisión del código puede ser un proceso iterativo, que continúa hasta que el parche está listo para ser comprometido. Específicamente, una vez que se envía un parche para su revisión, debe recibir una "looks good" antes de que se comprometa. Siempre que sea explícito, esto puede tomar cualquier forma que tenga sentido para el método de revisión.
+* Los tiempos muertos no sustituyen a la revisión.
+
+A veces las revisiones de los códigos tardan más de lo que se espera, especialmente para las funciones más grandes. Las formas aceptadas de acelerar los tiempos de revisión de tus parches son:
+
+* Revisa los parches de otras personas. Si ayudas, todo el mundo estará más dispuesto a hacer lo mismo por ti; la buena voluntad es nuestra moneda.
+* Haga ping al parche. Si es urgente, proporcione las razones por las que es importante para usted obtener este parche y hacer ping cada dos días. Si no es urgente, la tasa de ping de cortesía común es de una semana. Recuerde que está pidiendo un tiempo valioso a otros desarrolladores profesionales.
+* Pida ayuda en las listas de correo, IRC, etc. Otros pueden ayudarle directamente o sugerirle un revisor.
+* Divide tu parche en múltiples parches más pequeños que se construyen uno sobre otro. Cuanto más pequeño sea tu parche, mayor es la probabilidad de que alguien le eche un vistazo rápido.
++ 
+Cuando se hacen grandes cambios, es útil tenerlo en cuenta desde el principio del proyecto, ya que dividir los grandes cambios en otros más pequeños suele ser difícil después del hecho.
+
+Los desarrolladores deben participar en las revisiones de código como revisores y revisados. Si alguien tiene la amabilidad de revisar tu código, deberías devolverle el favor a otra persona. Ten en cuenta que aunque cualquiera es bienvenido a revisar y dar su opinión sobre un parche, sólo un experto en la materia puede aprobar un cambio. Normalmente será un especialista que trabaje con el código en cuestión de forma regular.
+
+En algunos casos, es posible que no se disponga de un experto en la materia. En esos casos, basta con un examen por parte de un desarrollador experimentado cuando se combina con las pruebas apropiadas.
+
+[[commit-log-message]]
+== Mensajes de Registro de Envíos
+
+Esta sección contiene algunas sugerencias y tradiciones sobre cómo se formatean los registros de envíos.
+
+Además de incluir un mensaje informativo con cada envío, es posible que se necesite información adicional.
+
+Esta información consta de una o más líneas que contienen la palabra o frase clave, dos puntos, pestañas para formatear y, a continuación, la información adicional.
+
+Las palabras o frases clave son:
+
+[.informaltable]
+[cols="1,1", frame="none"]
+|===
+
+|`PR:`
+|El informe del problema (si lo hay) que se ve afectado (normalmente, por estar cerrado) por este envío. Se pueden especificar varias PRs en una línea, separadas por comas o espacios.
+
+|`Enviado por:`
+|
+
+El nombre y la dirección de correo electrónico de la persona que envió el parche; para los desarrolladores, sólo el nombre de usuario en el clúster de FreeBSD.
+
+Si el remitente es el encargado de mantener el puerto al que se están haciendo los envíos, incluya "(mantainer)" después de la dirección de correo electrónico.
+
+Evite confundir la dirección de correo electrónico del remitente, ya que esto añade trabajo adicional al buscar en los registros.
+
+|`Revisado por:`
+|El nombre y la dirección de correo electrónico de la persona o personas que revisaron el cambio; para los desarrolladores, sólo el nombre de usuario en el clúster de FreeBSD. Si se envió un parche a una lista de correo para su revisión, y la revisión fue favorable, entonces sólo incluya el nombre de la lista.
+
+|`Aprobado por:`
+a|
+
+El nombre y la dirección de correo electrónico de la persona o personas que aprobaron el cambio; para los desarrolladores, solo el nombre de usuario en el clúster de FreeBSD. Es habitual obtener una aprobación previa para una confirmación si se trata de un área del árbol en la que normalmente no se compromete. Además, durante el período previo a una nueva versión, todas las confirmaciones _debe_ ser aprobado por el equipo de ingeniería de versiones.
+
+Mientras esté bajo la supervisión de un mentor, consiga la aprobación de éste antes de comprometerse. Ingrese el nombre de usuario del mentor en este campo, y note que es un mentor:
+
+[source,bash]
+....
+Aprobado por: nombre de usuario del mentor.(mentor)
+....
+
+Si un equipo aprobó estos compromisos, entonces incluye el nombre del equipo seguido del nombre de usuario del que lo aprobó entre paréntesis. Por ejemplo:
+
+[source,bash]
+....
+Aprobado por: re (username)
+....
+
+
+|`Obtenido de:`
+|El nombre del proyecto (si lo hay) del que se obtuvo el código. No utilice esta línea para el nombre de una persona individual.
+
+|`Patrocinado por:`
+|Organizaciones patrocinadoras de este cambio, si las hubiera. Separe varias organizaciones con comas. Si solo se patrocinó una parte del trabajo, o se proporcionaron diferentes cantidades de patrocinio a diferentes autores, dé el crédito correspondiente entre paréntesis después del nombre de cada patrocinador. Por ejemplo, `Example.com (alice, refactorización de código), Wormulon (bob), Momcorp (cindy)` muestra que Alice fue patrocinada por Example.com para hacer la refactorización de código, mientras que Wormulon patrocinó el trabajo de Bob y Momcorp patrocinó el trabajo de Cindy. Otros autores no recibieron patrocinio o optaron por no incluir el patrocinio.
+
+|`MFC después:`
+|Para recibir un recordatorio por correo electrónico MFC en una fecha posterior, especifique el número de días, semanas o meses después del cual MFC es planeado.
+
+|`MFC to:`
+|Si la confirmación debe fusionarse con un subconjunto de ramas estables, especifique los nombres de las ramas.
+
+|`MFC con:`
+|Si el compromiso debe fusionarse con uno anterior en un solo MFC commit (por ejemplo, donde este commit corrige un error en el cambio anterior), especifique el número de revisión correspondiente.
+
+|`Relnotes:`
+|Si el cambio es un candidato para su inclusión en las notas de la versión para la próxima versión de la rama, establézcalo en `si`.
+
+|`Seguridad:`
+|Si el cambio está relacionado con una vulnerabilidad de seguridad o una exposición a la seguridad, incluya una o más referencias o una descripción de la cuestión. Si es posible, incluya una URL de VuXML o un ID de CVE.
+
+|`Event:`
+|La descripción del evento en el que se realizó esta confirmación. Si se trata de un evento recurrente, agregue el año o incluso el mes. Por ejemplo, esto podría ser `FooBSDcon 2019`. la idea detrás de esta línea es dar reconocimiento a conferencias, tertulias y otros tipos de encuentros y demostrar que es útil tenerlos. No utilice el `Patrocinado por:` para esto, ya que está destinado a organizaciones que patrocinan ciertas funciones o desarrolladores que trabajan en ellas.
+
+|`Differential Revision:`
+|La URL completa de la revisión de Phabricator. Esta línea _debe ser la última línea_. Por ejemplo: `https://reviews.freebsd.org/D1708`.
+|===
+
+.Registro de compromiso para un compromiso basado en un PR
+[example]
+====
+La confirmación se basa en un parche de un PR enviado por John Smith. El mensaje de confirmación "PR" y "Presentado por" los campos están llenos ..
+
+[.programlisting]
+....
+...
+
+	    PR:                    12345
+	    Submitted by:	   John Smith <John.Smith@example.com>
+....
+
+====
+
+.Confirmar registro para una confirmación que necesita revisión
+[example]
+====
+Se está cambiando el sistema de memoria virtual. Después de publicar los parches en la lista de correo correspondiente (en este caso, `freebsd-arch`) y los cambios han sido aprobados.
+
+[.programlisting]
+....
+...
+
+	    Reviewed by:       -arch
+....
+
+====
+
+.Registro de compromiso para un compromiso que necesita aprobación
+[example]
+====
+Confirmar un puerto, después de trabajar con el MAINTAINER enumerado, quien dijo seguir adelante y comprometerse.
+
+[.programlisting]
+....
+...
+
+	    Approved by:	    abc (maintainer)
+....
+
+Donde _abc_ es el nombre de la cuenta de la persona que aprobó.
+====
+
+.Commit Log para una confirmación que trae código desde OpenBSD
+[example]
+====
+Confirmar código basado en el trabajo realizado en el proyecto OpenBSD.
+
+[.programlisting]
+....
+...
+
+	    Obtained from:      OpenBSD
+....
+
+====
+
+.Commit Log para un cambio en FreeBSD-CURRENT con un compromiso planificado en FreeBSD-STABLE para seguir en una fecha posterior.
+[example]
+====
+Confirmando un código que se fusionará de FreeBSD-CURRENT en la rama FreeBSD-STABLE después de dos semanas.
+
+[.programlisting]
+....
+...
+
+MFC after:      2 weeks
+....
+
+Donde _2_ es el número de días, semanas o meses después de los cuales MFC esta planeado. los _semanas_ la opción puede ser `dia`,`dias`,`semana`,`semanas`,`mes`,`meses`.
+====
+
+A menudo es necesario combinarlos.
+
+Considere la situación en la que un usuario ha enviado un PR que contiene código del proyecto NetBSD. Al mirar el PR, el desarrollador ve que no es un área del árbol en el que normalmente trabajan, por lo que el cambio lo revisa el `arch` lista de correo. Dado que el cambio es complejo, el desarrollador opta por MFC después de un mes para permitir las pruebas adecuadas.
+
+La información adicional para incluir en la confirmación sería algo así como
+
+.Ejemplo de registro de confirmación combinado
+[example]
+====
+[.programlisting]
+....
+PR:                 54321
+Submitted by:       John Smith <John.Smith@example.com>
+Reviewed by:        -arch
+Obtained from:      NetBSD
+MFC after:          1 month
+Relnotes:           yes
+....
+
+====
+
+[[pref-license]]
+== Licencia preferida para los nuevos archivos
+
+La política de licencia completa del Proyecto FreeBSD puede encontrarse en link:https://www.FreeBSD.org/internal/software-license/[https://www.FreeBSD.org/internal/software-license/]. El resto de esta sección está pensada para ayudarte a empezar. Como regla, cuando tenga dudas, pregunte. Es mucho más fácil dar consejos que arreglar el árbol fuente.
+
+El Proyecto FreeBSD sugiere y usa este texto como el esquema de licencia preferido:
+
+[.programlisting]
+....
+/*-
+ * SPDX-License-Identifier: BSD-2-Clause-FreeBSD
+ *
+ * Copyright (c) [year] [your name]
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ *
+ * [id for your version control system, if any]
+ */
+....
+
+El proyecto FreeBSD desaconseja rotundamente la denominada "cláusula publicitaria" en el nuevo código. Debido a la gran cantidad de contribuyentes al proyecto FreeBSD, cumplir con esta cláusula para muchos proveedores comerciales se ha vuelto difícil. Si tiene código en el árbol con la cláusula publicitaria, considere eliminarlo. De hecho, considere usar la licencia anterior para su código.
+
+El proyecto FreeBSD desaconseja licencias completamente nuevas y variaciones de las licencias estándar. Las nuevas licencias requieren la aprobación del Core Team mailto:core@FreeBSD.org[core@FreeBSD.org] residir en el repositorio principal. Cuantas más licencias diferentes se utilicen en el árbol, más problemas ocasionará a quienes deseen utilizar este código, por lo general debido a las consecuencias no deseadas de una licencia mal redactada.
+
+La política del proyecto dicta que el código de algunas licencias que no sean BSD debe colocarse solo en secciones específicas del repositorio y, en algunos casos, la compilación debe ser condicional o incluso deshabilitada de forma predeterminada. Por ejemplo, el núcleo GENÉRICO debe compilarse únicamente bajo licencias idénticas o sustancialmente similares a la licencia BSD. GPL, APSL, CDDL, etc., el software con licencia no debe compilarse en GENERIC.
+
+Se recuerda a los desarrolladores que en el código abierto, conseguir "abrir" correctamente es tan importante como conseguir "fuente" correcta, ya que el manejo inadecuado de la propiedad intelectual tiene graves consecuencias. Cualquier pregunta o inquietud debe comunicarse inmediatamente con el equipo central.
+
+[[tracking-license-grants]]
+== Seguimiento de las licencias concedidas al proyecto FreeBSD
+
+Existen varios software o datos en los repositorios donde el proyecto FreeBSD ha recibido una licencia especial para poder usarlos. Un ejemplo son las fuentes Terminus para su uso con man:vt[4]. Aquí, el autor Dimitar Zhekov nos ha permitido usar la fuente "Terminus BSD Console" bajo una licencia BSD de 2 cláusulas en lugar de la licencia de fuente abierta regular que usa normalmente.
+
+Es evidente que es sensato mantener un registro de dichas concesiones de licencias. Con ese fin, el Core Team mailto:core@FreeBSD.org[core@FreeBSD.org] ha decidido mantener un archivo de ellos. Siempre que se conceda una licencia especial al proyecto FreeBSD, requerimos el equipo central mailto:core@FreeBSD.org[core@FreeBSD.org] ser notificado. Cualquier desarrollador involucrado en la organización de dicha concesión de licencia, envíe los detalles al equipo central. mailto:core@FreeBSD.org[core@FreeBSD.org]incluyendo:
+
+* Datos de contacto de personas u organizaciones que otorgan la licencia especial.
+* Qué archivos, directorios, etc. de los repositorios están cubiertos por la concesión de licencia, incluidos los números de revisión donde se comprometió cualquier material con licencia especial.
+* La fecha en que la licencia entra en vigor. A menos que se acuerde lo contrario, esta será la fecha en que la licencia fue emitida por los autores del software en cuestión.
+* El texto de la licencia.
+* Una nota de cualquier restricción, limitación o excepción que se aplique específicamente al uso de FreeBSD del material licenciado.
+* Cualquier otra información relevante.
+
+Una vez que el Equipo del Núcleo mailto:core@FreeBSD.org[core@FreeBSD.org] esté satisfecho de que todos los detalles necesarios se han reunido y son correctos, la secretaria enviará un acuse de recibo firmado por PGP incluyendo los detalles de la licencia. Este recibo será archivado de forma persistente y servirá como nuestro registro permanente de la adjudicación de la licencia.
+
+El archivo de licencias debe contener sólo detalles de las licencias concedidas; no es el lugar para ninguna discusión sobre licencias u otros temas. El acceso a los datos del archivo de licencias estará disponible a petición del Equipo del Núcleo mailto:core@FreeBSD.org[core@FreeBSD.org].
+
+[[developer-relations]]
+== Relaciones con los desarrolladores
+
+Cuando trabaje directamente en su propio código o en un código que ya está bien establecido como su responsabilidad, entonces probablemente haya poca necesidad de verificar con otros confirmadores antes de saltar con un compromiso. Trabajando en un error en un área del sistema que está claramente huérfana (y hay algunas áreas de este tipo, para nuestra vergüenza), se aplica lo mismo. Cuando modifique partes del sistema que se mantienen, formal o informalmente, considere solicitar una revisión tal como lo haría un desarrollador antes de convertirse en un committer. Para puertos, comuníquese con el `MAINTAINER` en el [.filename]#Makefile#.
+
+Para determinar si se mantiene un área del árbol, consulte el archivo MAINTAINERS en la raíz del árbol. Si no aparece nadie, escanee el historial de revisiones para ver quién ha realizado cambios en el pasado. Puede encontrar un script de ejemplo que enumera a cada persona que se ha comprometido con un archivo determinado junto con el número de confirmaciones que ha realizado cada persona en el `freefall` a [.filename]#~eadler/bin/whodid#. Si las consultas quedan sin respuesta o el autor de la confirmación indica de otro modo una falta de interés en el área afectada, continúe y confíe.
+
+[IMPORTANT]
+====
+Evita enviar correos electrónicos privados a los mantenedores. Otras personas podrían estar interesadas en la conversación, no sólo en el resultado final.
+====
+
+Si hay alguna duda sobre un compromiso por cualquier motivo, hágalo revisar antes de realizar el compromiso. Es mejor tenerlo flameado en ese mismo momento que cuando es parte del repositorio. Si un compromiso da lugar a que surja una controversia, puede ser aconsejable considerar volver a respaldar el cambio hasta que se resuelva el asunto. Recuerde, con un sistema de control de versiones siempre podemos volver a cambiarlo.
+
+No impugne las intenciones de los demás. Si ven una solución diferente a un problema, o incluso un problema diferente, probablemente no sea porque sean estúpidos, porque tienen una paternidad cuestionable o porque están tratando de destruir el trabajo duro, la imagen personal o FreeBSD, sino básicamente porque tienen una perspectiva diferente del mundo. Diferente es bueno.
+
+Honestamente en desacuerdo. Argumente su posición desde sus méritos, sea honesto acerca de cualquier deficiencia que pueda tener y esté abierto a ver su solución, o incluso su visión del problema, con una mente abierta.
+
+Acepta la corrección. Todos somos falibles. Cuando haya cometido un error, discúlpese y siga con su vida. No se castigue a sí mismo, y ciertamente no golpee a otros por su error. No pierda el tiempo en vergüenza o recriminación, simplemente solucione el problema y siga adelante.
+
+Pedir ayuda. Busque (y proporcione) revisiones de pares. Una de las formas en que se supone que el software de código abierto sobresale es en la cantidad de ojos que se le aplican; esto no se aplica si nadie revisa el código.
+
+[[if-in-doubt]]
+== Si tienes dudas ...
+
+Cuando no esté seguro de algo, ya sea un problema técnico o una convención del proyecto, asegúrese de preguntar. Si te quedas en silencio, nunca progresarás.
+
+Si se relaciona con un problema técnico, pregunte en las listas de correo públicas. Evite la tentación de enviar un correo electrónico a la persona que conoce la respuesta. De esta manera, todos podrán aprender de la pregunta y la respuesta.
+
+Para preguntas administrativas o específicas del proyecto, pregunte, en orden:
+
+* Tu mentor o ex mentor.
+* Un cometer experimentado en IRC, correo electrónico, etc.
+* Cualquier equipo con "sombrero", ya que pueden darte una respuesta definitiva.
+* Si aún no está seguro, pregunte en la lista de correo de desarrolladores de FreeBSD.
+
+Una vez que se responda su pregunta, si nadie le indicó la documentación que detalla la respuesta a su pregunta, documente, ya que otros tendrán la misma pregunta.
+
+[[bugzilla]]
+== Bugzilla
+
+El proyecto FreeBSD utiliza Bugzilla para rastrear errores y solicitudes de cambio. Asegúrese de cerrarlo si confirma una solución o sugerencia que se encuentra en la base de datos de relaciones públicas. También se considera bueno si se toma el tiempo para cerrar cualquier RP asociado con sus confirmaciones, si corresponde.
+
+Comprometidos con no `FreeBSD.org` Las cuentas de Bugzilla pueden tener la cuenta anterior fusionada con la `FreeBSD.org` cuenta siguiendo estos pasos:
+
+[.procedure]
+. Inicie sesión con su cuenta anterior.
+. Abra un nuevo error. Escoger `Services` como el Producto, y `Bug Tracker` como Componente. En la lista de descripción de errores, las cuentas que desea fusionar.
+. Iniciar sesión usando `FreeBSD.org` cuenta y publique un comentario en el error recién abierto para confirmar la propiedad. Ver <<kerberos-ldap>> para obtener más detalles sobre cómo generar o establecer una contraseña para su `FreeBSD.org` cuenta.
+. Si hay más de dos cuentas para fusionar, publique comentarios de cada una de ellas.
+
+Puede obtener más información sobre Bugzilla en:
+
+* link:{pr-guidelines}[Pautas de manejo de informes de problemas de FreeBSD]
+* link:https://www.FreeBSD.org/support/[https://www.FreeBSD.org/support/]
+
+[[phabricator]]
+== Fabricador
+
+El proyecto FreeBSD utiliza https://reviews.freebsd.org[Phabricator] para solicitudes de revisión de código. Ver el https://wiki.freebsd.org/CodeReview[CodeReview] wiki page for details.
+
+Comprometidos con no `FreeBSD.org` Las cuentas de Phabricator pueden cambiar el nombre de la cuenta anterior a la `FreeBSD.org` cuenta siguiendo estos pasos:
+
+[.procedure]
+. Cambiar tu Fabricadorcuenta de correo electrónico a su `FreeBSD.org` correo.
+. Abra un nuevo error en nuestro rastreador de errores con su `FreeBSD.org` cuenta, mire <<bugzilla>> para más información. Escoger `Services` como el Producto, y `revisión de código` como Componente. En la descripción del error, solicite que su Phabricator cambiar el nombre de la cuenta y proporcionar un enlace a su Phabricator usuario. Por ejemplo, https://reviews.freebsd.org/p/_bob_example.com
+
+[IMPORTANT]
+====
+Phabricator las cuentas no se pueden fusionar, no abra una nueva cuenta.
+====
+
+[[people]]
+== Quien es Quien
+
+Además de los meisters del repositorio, hay otros miembros y equipos del proyecto FreeBSD a los que probablemente conocerá en su rol de committer. Brevemente, y de ninguna manera todo incluido, estos son:
+
+Equipo de ingeniería de documentaciónmailto:doceng@FreeBSD.org[doceng@FreeBSD.org]::
+doceng es el grupo responsable de la infraestructura de construcción de documentación, la aprobación de nuevos confirmadores de documentación y la garantía de que el sitio web de FreeBSD y la documentación en el sitio FTP estén actualizados con respecto a la subversion árbol. No es un organismo de resolución de conflictos. La gran mayoría de la discusión relacionada con la documentación tiene lugar en el http://lists.FreeBSD.org/mailman/listinfo/freebsd-doc[Lista de correo del proyecto de documentación de FreeBSD]. Más detalles sobre el equipo doceng se pueden encontrar en su https://www.FreeBSD.org/internal/doceng/[charter]. Los confirmadores interesados en contribuir a la documentación deben familiarizarse con el link:{fdp-primer}[Documentation Project Primer].
+
+Glen Barber mailto:gjb@FreeBSD.org[gjb@FreeBSD.org], Konstantin Belousov mailto:kib@FreeBSD.org[kib@FreeBSD.org], Bryan Drewery mailto:bdrewery@FreeBSD.org[bdrewery@FreeBSD.org], Marc Fonvieille mailto:blackend@FreeBSD.org[blackend@FreeBSD.org], Xin Li mailto:delphij@FreeBSD.org[delphij@FreeBSD.org], Colin Percival mailto:cperciva@FreeBSD.org[cperciva@FreeBSD.org] Hiroki Sato mailto:hrs@FreeBSD.org[hrs@FreeBSD.org], Gleb Smirnoff mailto:glebius@FreeBSD.org[glebius@FreeBSD.org]::
+Estos son los miembros del equipo de ingeniería de versiones mailto:re@FreeBSD.org[re@FreeBSD.org]. este equipo es responsable de establecer los plazos de publicación y controlar el proceso de publicación. Durante la congelación del código, los ingenieros de versiones tienen la autoridad final sobre todos los cambios en el sistema para cualquier rama que tenga el estado de versión pendiente. Si hay algo que desee fusionar de FreeBSD-CURRENT a FreeBSD-STABLE (independientemente de los valores que puedan tener en un momento dado), estas son las personas con las que hablar al respecto.
+
+Gordon Tetlow mailto:gordon@FreeBSD.org[gordon@FreeBSD.org]::
+Gordon Tetlow es el link:https://www.FreeBSD.org/security/[Oficial de seguridad de FreeBSD] y supervisa el equipo de oficiales de seguridad mailto:security-officer@FreeBSD.org[security-officer@FreeBSD.org].
+
+Garrett Wollman mailto:wollman@FreeBSD.org[wollman@FreeBSD.org]::
+Si necesita asesoramiento sobre aspectos internos oscuros de la red o no está seguro de algún cambio potencial en el subsistema de red que tiene en mente, Garrett es alguien con quien hablar. Garrett también está muy bien informado sobre los diversos estándares aplicables a FreeBSD.
+
+Lista de correo de confirmadores de FreeBSD::
+http://lists.FreeBSD.org/mailman/listinfo/svn-src-all[svn-src-all], http://lists.FreeBSD.org/mailman/listinfo/svn-ports-all[svn-ports-all] and http://lists.FreeBSD.org/mailman/listinfo/svn-doc-all[svn-doc-all] son las listas de correo que utiliza el sistema de control de versiones para enviar mensajes de confirmación. _Never_ enviar correo electrónico directamente a estas listas. Solo envíe respuestas a esta lista cuando sean breves y estén directamente relacionadas con una confirmación.
+
+Lista de correo de desarrolladores de FreeBSD::
+Todos los confirmadores están suscritos a -developers. Esta lista fue creada para ser un foro para los confirmadores."comunidad" cuestiones. Algunos ejemplos son votaciones centrales, anuncios, etc.
++
+La lista de correo de desarrolladores de FreeBSD es para uso exclusivo de los confirmadores de FreeBSD. Para desarrollar FreeBSD, los confirmadores deben tener la capacidad de discutir abiertamente los asuntos que se resolverán antes de que se anuncien públicamente. Las discusiones francas sobre el trabajo en progreso no son adecuadas para la publicación abierta y pueden dañar FreeBSD.
++
+Se espera que todos los confirmadores de FreeBSD no publiquen ni reenvíen mensajes de la lista de correo de desarrolladores de FreeBSD fuera de la membresía de la lista sin el permiso de todos los autores. Los infractores serán eliminados de la lista de correo de desarrolladores de FreeBSD, lo que resultará en la suspensión de los privilegios de confirmación. Las violaciones repetidas o flagrantes pueden resultar en la revocación permanente de los privilegios de compromiso.
++
+Esta lista es _no_ destinado a ser un lugar para revisiones de código o para cualquier discusión técnica. De hecho, usarlo como tal perjudica al Proyecto FreeBSD ya que da la sensación de una lista cerrada donde las decisiones generales que afectan a toda la comunidad que usa FreeBSD se toman sin ser "abrir". Último, pero no menos importante _nunca, nunca, envíe un correo electrónico a la lista de correo de desarrolladores de FreeBSD y CC: / BCC: otra lista de FreeBSD_. Nunca, nunca envíe por correo electrónico otra lista de correo electrónico de FreeBSD y CC: / BCC: la lista de correo de desarrolladores de FreeBSD. Hacerlo puede disminuir en gran medida los beneficios de esta lista.
+
+
+[[ssh-guide]]
+== Guía de inicio rápido de SSH
+
+[.procedure]
+. Si no desea ingresar su contraseña cada vez que useman:ssh[1], y usas claves para autenticarte, man:ssh-agent[1] está ahí para su conveniencia. Si quieres usar man:ssh-agent[1], asegúrese de ejecutarlo antes de ejecutar otras aplicaciones. Los usuarios de X, por ejemplo, suelen hacer esto desde su [.filename]#.xsession# or [.filename]#.xinitrc#. See man:ssh-agent[1] para detalles.
+. Genere un par de claves usando man:ssh-keygen[1]. El par de claves terminará en tu [.filename]#$HOME/.ssh/# directory.
++
+[IMPORTANT]
+====
+Solo ECDSA, Ed25519 o RSA las claves son compatibles.
+====
+
+. Envíe su clave pública ([.filename]#$HOME/.ssh/id_ecdsa.pub#, [.filename]#$HOME/.ssh/id_ed25519.pub#, or [.filename]#$HOME/.ssh/id_rsa.pub#)a la persona que lo establece como un consignatario para que pueda ser puesto en [.filename]#yourlogin# in [.filename]#/etc/ssh-keys/# on `freefall`.
+
+Ahora man:ssh-add[1] se puede utilizar para la autenticación una vez por sesión. Solicita la contraseña de la clave privada y luego la almacena en el agente de autenticación. (man:ssh-agent[1]). Use `ssh-add -d` Para eliminar claves almacenadas en el agente.
+
+Prueba con un simple comando remoto: `ssh freefall.FreeBSD.org ls /usr`.
+
+For more informacion, mire package:security/openssh-portable[], man:ssh[1], man:ssh-add[1], man:ssh-agent[1], man:ssh-keygen[1], and man:scp[1].
+
+Para obtener información sobre cómo agregar, cambiar o eliminar man:ssh[1] keys, see https://wiki.freebsd.org/clusteradm/ssh-keys[Este artículo].
+
+[[coverity]]
+== Coverity(TM) Disponibilidad para Committers FreeBSD
+
+Todos los desarrolladores de FreeBSD pueden obtener acceso a Coverity resultados del análisis de todo el software FreeBSD Project. Todos los que estén interesados en obtener acceso a los resultados del análisis del automatizado Coverity corre, puede registrarse en http://scan.coverity.com/[Coverity Scan].
+
+La wiki de FreeBSD incluye una mini-guía para desarrolladores que estén interesados en trabajar con Coverity(TM) analysis reports: https://wiki.freebsd.org/CoverityPrevent[https://wiki.freebsd.org/CoverityPrevent]. Tenga en cuenta que esta mini-guía solo es legible por los desarrolladores de FreeBSD, por lo que si no puede acceder a esta página, tendrá que pedirle a alguien que lo agregue a la lista de acceso Wiki correspondiente.
+
+Finalmente, todos los desarrolladores de FreeBSD que van a usar Coverity(TM) Siempre se les anima a solicitar más detalles e información de uso, publicando cualquier pregunta en la lista de correo de los desarrolladores de FreeBSD.
+
+[[rules]]
+== La gran lista de reglas de los Committers de FreeBSD
+
+Se espera que todos los involucrados en el proyecto FreeBSD cumplan con las _Código de Conducta_ disponible en link:https://www.FreeBSD.org/internal/code-of-conduct/[https://www.FreeBSD.org/internal/code-of-conduct/]. Como comprometidos, ustedes forman la cara pública del proyecto, y su comportamiento tiene un impacto vital en la percepción pública del mismo. Esta guía amplía las partes del _Código de Conducta_ específico para los committers.
+
+. Respeta a los demás comprometidos.
+. Respetar a otros contribuyentes.
+. Discutir cualquier cambio significativo _antes_ de cometer.
+. Respete los mantenedores existentes (si se enumeran en el `MAINTAINER` campo en [.filename]#Makefile# o en [.filename]#MAINTAINER# en el directorio de nivel superior).
+. Cualquier cambio en disputa debe ser anulado en espera de la resolución de la disputa si lo solicita un mantenedor. Los cambios relacionados con la seguridad pueden anular los deseos del mantenedor a discreción del oficial de seguridad.
+. Los cambios van a FreeBSD-CURRENT antes de FreeBSD-STABLE a menos que el ingeniero de versiones lo permita específicamente o que no sean aplicables a FreeBSD-CURRENT. Cualquier cambio no trivial o no urgente que sea aplicable también debe permitirse que permanezca en FreeBSD-CURRENT durante al menos 3 días antes de fusionarse para que se puedan realizar las pruebas suficientes. El ingeniero de versiones tiene la misma autoridad sobre la rama FreeBSD-STABLE que se describe para el mantenedor en la regla # 5.
+. No luche en público con otros cometer; se ve mal.
+. Respete todos los códigos congelados y lea el `committers` y `desarrolladores` listas de correo de manera oportuna para que sepa cuándo está en vigencia una congelación de código.
+. En caso de duda sobre cualquier procedimiento, ¡pregunte primero!
+. Pruebe sus cambios antes de realizarlos.
+. No se comprometa con el software contribuido sin _explícito_ aprobación de los respectivos mantenedores.
+
+Como se señaló, romper algunas de estas reglas puede ser motivo de suspensión o, en caso de reincidencia, eliminación permanente de los privilegios de cometer. Los miembros individuales del núcleo tienen el poder de suspender temporalmente los privilegios de confirmación hasta que el núcleo en su conjunto tenga la oportunidad de revisar el problema. En caso de "emergencia" (un confirmador que daña el repositorio), los meisters del repositorio también pueden realizar una suspensión temporal. Solo una mayoría de 2/3 del núcleo tiene la autoridad para suspender los privilegios de confirmación durante más de una semana o para eliminarlos permanentemente. Esta regla no existe para que el núcleo se convierta en un grupo de dictadores crueles que pueden deshacerse de los responsables de manera tan casual como las latas de refresco vacías, sino para darle al proyecto una especie de mecha de seguridad. Si alguien está fuera de control, es importante poder lidiar con esto de inmediato en lugar de quedar paralizado por el debate. En todos los casos, un cometer cuyos privilegios se suspenden o revocan tiene derecho a una "audición" por núcleo, determinándose en ese momento la duración total de la suspensión. Un remitente cuyos privilegios estén suspendidos también puede solicitar una revisión de la decisión después de 30 días y cada 30 días a partir de entonces (a menos que el período total de suspensión sea inferior a 30 días). Un remitente cuyos privilegios hayan sido revocados por completo puede solicitar una revisión después de que haya transcurrido un período de 6 meses. Esta política de revisión es _estrictamente informal_ y, en todos los casos, core se reserva el derecho de actuar o ignorar las solicitudes de revisión si sienten que su decisión original es la correcta.
+
+En todos los demás aspectos de la operación del proyecto, el núcleo es un subconjunto de confirmadores y está vinculado por el _mismas reglas_. El hecho de que alguien esté en el núcleo no significa que tenga una dispensación especial para salir de cualquiera de las líneas pintadas aquí; núcleo"poderes especiales" solo se activa cuando actúa como grupo, no de forma individual. Como individuos, los miembros del equipo central son todos comprometidos primero y segundo central.
+
+=== Detalles
+
+[[respect]]
+. Respeta a los demás comprometidos.
++ 
+Esto significa que debe tratar a los demás confirmadores como los desarrolladores de grupos de pares que son. A pesar de nuestros ocasionales intentos de demostrar lo contrario, uno no llega a cometer un delito siendo estúpido y nada irrita más que ser tratado de esa manera por uno de sus compañeros. Si siempre sentimos respeto por los demás o no (y todos tienen días libres), todavía tenemos que _treat_ otros committers con respeto en todo momento, en foros públicos y en correos privados.
++ 
+Poder trabajar juntos a largo plazo es el mayor activo de este proyecto, uno mucho más importante que cualquier conjunto de cambios en el código, y convertir los argumentos sobre el código en problemas que afectan nuestra capacidad a largo plazo para trabajar juntos en armonía simplemente no vale la pena. -abandonado por cualquier tramo concebible de la imaginación.
++ 
+Para cumplir con esta regla, no envíe correos electrónicos cuando esté enojado o se comporte de una manera que pueda parecer a los demás como una confrontación innecesaria. Primero cálmate, luego piensa en cómo comunicarte de la manera más efectiva para convencer a las otras personas de que tu lado del argumento es correcto, no desahogues un poco para sentirte mejor en el corto plazo a costa de una guerra de llamas a largo plazo. No solo esto es muy malo "economía energética", pero las demostraciones repetidas de agresión pública que perjudican nuestra capacidad para trabajar bien juntos serán tratadas severamente por el liderazgo del proyecto y pueden resultar en la suspensión o terminación de sus privilegios de compromiso. El liderazgo del proyecto tendrá en cuenta tanto las comunicaciones públicas como las privadas que se le presenten. No buscará la divulgación de comunicaciones privadas, pero la tendrá en cuenta si es voluntaria por parte de los autores de la denuncia.
++ 
+Todo esto nunca es una opción de la que disfrute en lo más mínimo el liderazgo del proyecto, pero la unidad es lo primero. Ninguna cantidad de código o buen consejo vale la pena cambiarlo.
+. Respetar a otros contribuyentes.
++ 
+No siempre fuiste un comprometido. Hubo un tiempo en que contribuiste. Recuerda eso en todo momento. Recuerde lo que fue tratar de obtener ayuda y atención. No olvides que tu trabajo como colaborador fue muy importante para ti. Recuerda cómo fue. No desanime, menosprecie o menosprecie a los contribuyentes. Trátelos con respeto. Son nuestros comprometidos en espera. Son tan importantes para el proyecto como los comprometidos. Sus contribuciones son tan válidas e importantes como las suyas. Después de todo, hizo muchas contribuciones antes de convertirse en un comprometido. Siempre recuerda eso.
++ 
+Considere los puntos planteados bajo <<respect,1>> Y aplicarlos también a los contribuyentes.
+. Discutir cualquier cambio significativo _antes_ de cometer.
++ 
+El repositorio no es donde los cambios se envían inicialmente para su corrección o se discuten, eso ocurre primero en las listas de correo o mediante el uso del servicio Phabricator. El compromiso solo ocurrirá una vez que se haya alcanzado algo parecido al consenso. Esto no significa que se requiera permiso antes de corregir todos los errores de sintaxis obvios o errores ortográficos de la página del manual, solo que es bueno desarrollar una idea de cuándo un cambio propuesto no es tan obvio y requiere algunos comentarios primero. A la gente realmente no le importan los cambios radicales si el resultado es claramente mejor que lo que tenían antes, simplemente no les gusta ser _sorprendido_ por esos cambios. La mejor manera de asegurarse de que todo va por buen camino es hacer que el código sea revisado por uno o más confirmadores.
++ 
+En caso de duda, ¡solicite una revisión!
+. Respete los mantenedores existentes si están incluidos.
++ 
+Muchas partes de FreeBSD no "owned" en el sentido de que cualquier individuo específico saltará y gritará si comete un cambio en "su" área, pero todavía vale la pena comprobar primero. Una convención que usamos es poner una línea de mantenedor en el [.filename]#Makefile# para cualquier paquete o subárbol que esté siendo mantenido activamente por una o más personas; ver link:{developers-handbook}#policies/[https://www.FreeBSD.org/doc/en/books/developers-handbook/policies/] para obtener documentación sobre esto. Cuando las secciones de código tienen varios mantenedores, los compromisos con las áreas afectadas por un mantenedor deben ser revisados por al menos otro mantenedor. En los casos en que "maintainer-ship" Si algo no está claro, mire los registros del repositorio de los archivos en cuestión y vea si alguien ha estado trabajando recientemente o predominantemente en esa área.
+. Cualquier cambio en disputa debe ser anulado en espera de la resolución de la disputa si lo solicita un mantenedor. Los cambios relacionados con la seguridad pueden anular los deseos del mantenedor a discreción del oficial de seguridad.
++ 
+Esto puede ser difícil de aceptar en tiempos de conflicto (cuando cada parte está convencida de que tienen razón, por supuesto), pero un sistema de control de versiones hace innecesario tener una disputa en curso cuando es mucho más fácil simplemente revertir la disputa cambie, calme a todos nuevamente y luego intente averiguar cuál es la mejor manera de proceder. Si el cambio resulta ser lo mejor después de todo, se puede recuperar fácilmente. Si resulta que no es así, entonces los usuarios no tenían que vivir con el falso cambio en el árbol mientras todos debatían afanosamente sus méritos. Personas _muy_ Rara vez piden retrocesos en el repositorio, ya que la discusión generalmente expone cambios malos o controvertidos incluso antes de que ocurra la confirmación, pero en ocasiones tan raras, el retroceso debe hacerse sin argumentos para que podamos pasar inmediatamente al tema de resolver si era falso o no.
+. Los cambios van a FreeBSD-CURRENT antes de FreeBSD-STABLE a menos que el ingeniero de versiones lo permita específicamente o que no sean aplicables a FreeBSD-CURRENT. Cualquier cambio no trivial o no urgente que sea aplicable también debe permitirse que permanezca en FreeBSD-CURRENT durante al menos 3 días antes de fusionarse para que se puedan realizar las pruebas suficientes. El ingeniero de versiones tiene la misma autoridad sobre la rama FreeBSD-STABLE como se describe en la regla # 5.
++ 
+Este es otro "no discutas sobre eso" problema, ya que es el ingeniero de versiones el responsable en última instancia (y recibe una paliza) si un cambio resulta ser malo. Respete esto y brinde al ingeniero de versiones su total cooperación cuando se trata de la rama FreeBSD-STABLE. El manejo de FreeBSD-STABLE puede parecer con frecuencia demasiado conservador para el observador casual, pero también tenga en cuenta el hecho de que se supone que el conservadurismo es el sello distintivo de FreeBSD-STABLE y que se aplican reglas diferentes a las de FreeBSD-CURRENT. Tampoco tiene sentido que FreeBSD-CURRENT sea un campo de pruebas si los cambios se fusionan con FreeBSD-STABLE inmediatamente. Los cambios necesitan la oportunidad de ser probados por los desarrolladores de FreeBSD-CURRENT, así que deje pasar un tiempo antes de fusionarse, a menos que la corrección de FreeBSD-STABLE sea crítica, urgente o tan obvia como para hacer innecesarias más pruebas corrección de errores / errores tipográficos, etc.) En otras palabras, aplique el sentido común.
++ 
+Cambios en las ramas de seguridad (por ejemplo, `releng/9.3`) debe ser aprobado por un miembro del equipo de oficiales de seguridad mailto:security-officer@FreeBSD.org[security-officer@FreeBSD.org], o en algunos casos, por un miembro del equipo de ingeniería de versiones mailto:re@FreeBSD.org[re@FreeBSD.org].
+. No luche en público con otros cometer; se ve mal.
++ 
+Este proyecto tiene una imagen pública que defender y esa imagen es muy importante para todos nosotros, especialmente si queremos seguir atrayendo nuevos miembros. Habrá ocasiones en las que, a pesar de los mejores intentos de autocontrol de todos, se pierden los ánimos y se intercambian palabras de enojo. Lo mejor que se puede hacer en tales casos es minimizar los efectos de esto hasta que todos se hayan enfriado nuevamente. No transmita palabras de enojo en público y no reenvíe correspondencia privada u otras comunicaciones privadas a listas de correo públicas, alias de correo, canales de mensajería instantánea o sitios de redes sociales. Lo que la gente dice cara a cara a menudo tiene mucho menos contenido de azúcar que lo que dirían en público y, por lo tanto, tales comunicaciones no tienen cabida allí; solo sirven para inflamar una situación que ya es mala. Si la persona que envía un flame-o-gramo al menos tuvo la gracia de enviarlo en privado, entonces tenga la gracia de mantenerlo en privado. Si siente que otro desarrollador lo está tratando injustamente y le está causando angustia, plantee el asunto con el núcleo en lugar de hacerlo público. Core hará todo lo posible para jugar a los pacificadores y hacer que las cosas vuelvan a la cordura. En los casos en que la disputa implique un cambio en la base de código y los participantes no parezcan estar llegando a un acuerdo amistoso, el núcleo puede designar a un tercero de mutuo acuerdo para resolver la disputa. Todas las partes involucradas deben aceptar quedar vinculadas por la decisión tomada por este tercero.
+. Respete todos los códigos congelados y lea el `comprometidos` y `desarrolladores` lista de correo de manera oportuna para que sepa cuándo está en vigencia una congelación de código.
++ 
+Realizar cambios no aprobados durante una congelación de código es un gran error y se espera que los confirmadores se mantengan actualizados sobre lo que está sucediendo antes de saltar después de una larga ausencia y comprometer 10 megabytes de material acumulado. A las personas que abusen de esto de forma regular se les suspenderán sus privilegios de compromiso hasta que regresen del Happy Reeducation Camp de FreeBSD que llevamos a cabo en Groenlandia.
+. En caso de duda sobre cualquier procedimiento, ¡pregunte primero!
++ 
+Se cometen muchos errores porque alguien tiene prisa y simplemente asume que sabe la forma correcta de hacer algo. Si no lo ha hecho antes, es muy probable que no sepa realmente la forma en que hacemos las cosas y realmente necesite preguntar primero o se avergonzará por completo en público. No hay vergüenza en preguntar "¿Cómo diablos hago esto?" Ya sabemos que eres una persona inteligente; de lo contrario, no sería un consumador.
+. Pruebe sus cambios antes de realizarlos.
++ 
+Esto puede parecer obvio, pero si realmente fuera tan obvio, probablemente no veríamos tantos casos de personas que claramente no lo hacen. Si sus cambios son en el kernel, asegúrese de que aún puede compilar tanto GENERIC como LINT. Si sus cambios están en cualquier otro lugar, asegúrese de que aún puede hacer mundo. Si sus cambios son en una rama, asegúrese de que la prueba se realice con una máquina que ejecute ese código. Si tiene un cambio que también puede romper otra arquitectura, asegúrese de probar en todas las arquitecturas compatibles. por favor refiérase a https://www.FreeBSD.org/internal/[Página interna de FreeBSD] para obtener una lista de los recursos disponibles. A medida que se agregan otras arquitecturas a la lista de plataformas compatibles con FreeBSD, los recursos de prueba compartidos apropiados estarán disponibles.
+. No se comprometa con el software contribuido sin _explícito_ aprobación de los respectivos mantenedores.
++ 
+El software contribuido es todo lo que [.filename]#src/contrib#,[.filename]#src/crypto#, o [.filename]#src/sys/contrib# arboles.
++ 
+Los árboles mencionados anteriormente son para software contribuido generalmente importado a una sucursal de un proveedor. Cometer algo allí puede causar dolores de cabeza innecesarios al importar versiones más nuevas del software. En general, considere enviar parches en sentido ascendente al proveedor. Los parches se pueden enviar a FreeBSD primero con el permiso del desarrollador.
++ 
+Las razones para modificar el software ascendente van desde querer un control estricto sobre una dependencia estrechamente acoplada hasta la falta de portabilidad en la distribución del código del repositorio canónico. Independientemente de la razón, el esfuerzo por minimizar la carga de mantenimiento de la horquilla es útil para los compañeros de mantenimiento. Evite realizar cambios triviales o estéticos en los archivos, ya que hace que cada combinación a partir de entonces sea más difícil: dichos parches deben volver a verificarse manualmente en cada importación.
++ 
+Si una pieza de software en particular carece de un mantenedor, se le anima a asumir la propiedad. Si no está seguro del correo electrónico de mantenimiento actual http://lists.FreeBSD.org/mailman/listinfo/freebsd-arch[Lista de correo de arquitectura y diseño de FreeBSD] y pregunte.
+
+
+=== Política sobre arquitecturas múltiples
+
+FreeBSD ha agregado varios puertos de arquitectura nueva durante los ciclos de lanzamiento recientes y realmente ya no es un i386(TM) sistema operativo céntrico. En un esfuerzo por facilitar la portabilidad de FreeBSD en las plataformas que apoyamos, core ha desarrollado este mandato:
+
+[.blockquote]
+Nuestra plataforma de referencia de 32 bits es i386 y nuestra plataforma de referencia de 64 bits es amd64. El trabajo de diseño importante (incluidos los cambios importantes de API y ABI) debe demostrar su valía en al menos una plataforma de 32 bits y al menos una de 64 bits, preferiblemente las plataformas de referencia primarias, antes de que se pueda comprometer con el árbol de origen.
+
+Se eligieron las plataformas i386 y amd64 debido a que están más disponibles para los desarrolladores y como representantes de diseños de sistemas y procesadores más diversos: big versus little endian, archivo de registro versus pila de registro, diferentes implementaciones de caché y DMA, tablas de páginas de hardware versus administración de TLB de software etc.
+
+Continuaremos reevaluando esta política a medida que cambien el costo y la disponibilidad de las plataformas de 64 bits.
+
+Los desarrolladores también deben conocer nuestra Política de niveles para el soporte a largo plazo de arquitecturas de hardware. Las reglas aquí están destinadas a proporcionar una guía durante el proceso de desarrollo y son distintas de los requisitos para las características y arquitecturas enumeradas en esa sección. Las reglas de nivel para el soporte de características en arquitecturas en el momento del lanzamiento son más estrictas que las reglas de cambios durante el proceso de desarrollo.
+
+=== Otras sugerencias
+
+Al realizar cambios en la documentación, utilice un corrector ortográfico antes de realizar la confirmación. Para todos los documentos XML, verifique que las directivas de formato sean correctas ejecutando `make lint` ypackage:textproc/igor[].
+
+Para páginas de manual, ejecute package:sysutils/manck[] y package:textproc/igor[] sobre la página del manual para verificar que todas las referencias cruzadas y las referencias de archivos sean correctas y que la página del manual tenga todos los ``MLINK``s instalado.
+
+No mezcle arreglos de estilo con nuevas funciones. Una corrección de estilo es cualquier cambio que no modifica la funcionalidad del código. La combinación de los cambios confunde el cambio de funcionalidad al solicitar diferencias entre las revisiones, lo que puede ocultar cualquier error nuevo. No incluya cambios de espacio en blanco con cambios de contenido en las confirmaciones de [.filename]#doc#. El desorden adicional en las diferencias hace que el trabajo de los traductores sea mucho más difícil. En su lugar, realice cambios de estilo o espacios en blanco en confirmaciones separadas que estén claramente etiquetadas como tales en el mensaje de confirmación.
+
+=== Funciones obsoletas
+
+Cuando sea necesario eliminar la funcionalidad del software en el sistema base, siga estas pautas siempre que sea posible:
+
+. En la página del manual y posiblemente en las notas de la versión se menciona que la opción, utilidad o interfaz está obsoleta. El uso de la función obsoleta genera una advertencia.
+. La opción, utilidad o interfaz se conserva hasta la próxima versión principal (punto cero).
+. La opción, utilidad o interfaz se elimina y ya no se documenta. Ahora está obsoleto. También es generalmente una buena idea anotar su eliminación en las notas de la versión.
+
+
+=== Privacidad y confidencialidad
+
+. La mayoría de los negocios de FreeBSD se realizan en público.
++ 
+FreeBSD es un _abierto_ proyecto. Lo que significa que no solo cualquiera puede usar el código fuente, sino que la mayor parte del proceso de desarrollo está abierto al escrutinio público.
+. Ciertos asuntos delicados deben permanecer privados o mantenidos bajo embargo.
++ 
+Lamentablemente, no puede haber una transparencia total. Como desarrollador de FreeBSD, tendrá un cierto grado de acceso privilegiado a la información. En consecuencia, se espera que respete ciertos requisitos de confidencialidad. A veces la necesidad de confidencialidad proviene de colaboradores externos o tiene un límite de tiempo específico. Sin embargo, sobre todo, se trata de no liberar comunicaciones privadas.
+. El oficial de seguridad tiene el control exclusivo sobre la publicación de avisos de seguridad.
++ 
+Donde hay problemas de seguridad que afectan a muchos sistemas operativos diferentes, FreeBSD frecuentemente depende del acceso temprano para poder preparar avisos para el lanzamiento coordinado. A menos que se pueda confiar en que los desarrolladores de FreeBSD mantendrán la seguridad, dicho acceso temprano no estará disponible. El oficial de seguridad es responsable de controlar el acceso previo al lanzamiento a la información sobre vulnerabilidades y de programar el lanzamiento de todos los avisos. Puede solicitar ayuda bajo condición de confidencialidad de cualquier desarrollador con conocimientos relevantes para preparar soluciones de seguridad.
+. Las comunicaciones con Core se mantienen confidenciales durante el tiempo que sea necesario.
++ 
+Las comunicaciones al núcleo inicialmente se tratarán de forma confidencial. Sin embargo, con el tiempo, la mayor parte del negocio de Core se resumirá en informes básicos mensuales o trimestrales. Se tendrá cuidado de no hacer públicos los detalles sensibles. Es posible que los registros de algunos temas particularmente sensibles no se informen en absoluto y se conservarán solo en los archivos privados de Core.
+. Es posible que se requieran acuerdos de no divulgación para acceder a ciertos datos comercialmente sensibles.
++ 
+El acceso a ciertos datos comercialmente sensibles solo puede estar disponible bajo un Acuerdo de confidencialidad. Se debe consultar al personal legal de la Fundación FreeBSD antes de celebrar cualquier acuerdo vinculante.
+. Las comunicaciones privadas no deben hacerse públicas sin permiso.
++ 
+Más allá de los requisitos específicos anteriores, existe una expectativa general de no publicar comunicaciones privadas entre desarrolladores sin el consentimiento de todas las partes involucradas. Pida permiso antes de reenviar un mensaje a una lista de correo pública o publicarlo en un foro o sitio web al que puedan acceder otras personas que no sean los corresponsales originales.
+. Las comunicaciones en canales de acceso restringido o solo para proyectos deben mantenerse privadas.
++ 
+De manera similar a las comunicaciones personales, ciertos canales de comunicación internos, incluidas las listas de correo de FreeBSD Committer y los canales de IRC de acceso restringido, se consideran comunicaciones privadas. Se requiere permiso para publicar material de estas fuentes.
+. Core puede aprobar la publicación.
++ 
+Cuando no sea práctico obtener permiso debido a la cantidad de corresponsales o cuando el permiso para publicar se niegue sin razón, Core puede aprobar la divulgación de tales asuntos privados que merecen una publicación más general.
+
+
+[[archs]]
+== Soporte para múltiples arquitecturas
+
+FreeBSD es un sistema operativo altamente portátil destinado a funcionar en muchos tipos diferentes de arquitecturas de hardware. Mantener una separación limpia del código dependiente de la máquina (MD) y el código independiente de la máquina (MI), así como minimizar el código MD, es una parte importante de nuestra estrategia para permanecer ágiles con respecto a las tendencias actuales de hardware. Cada nueva arquitectura de hardware soportada por FreeBSD aumenta sustancialmente el costo del mantenimiento del código, el soporte de la cadena de herramientas y la ingeniería de versiones. También aumenta drásticamente el costo de las pruebas efectivas de los cambios del kernel. Como tal, existe una fuerte motivación para diferenciar entre clases de soporte para varias arquitecturas mientras se mantiene fuerte en algunas arquitecturas clave que se ven como FreeBSD "Público objetivo".
+
+=== Declaración de intención general
+
+El proyecto FreeBSD apunta a "estaciones de trabajo comerciales listas para usar (COTS) de calidad de producción, servidores y sistemas integrados de alta gama". Al mantener un enfoque en un conjunto estrecho de arquitecturas de interés en estos entornos, el Proyecto FreeBSD puede mantener altos niveles de calidad, estabilidad y rendimiento, así como minimizar la carga en varios equipos de soporte en el proyecto, como el equipo de puertos, equipo de documentación, oficial de seguridad y equipos de ingenieros de liberación. La diversidad en el soporte de hardware amplía las opciones para los consumidores de FreeBSD al ofrecer nuevas características y oportunidades de uso, pero estos beneficios siempre deben considerarse cuidadosamente en términos del costo de mantenimiento del mundo real asociado con el soporte de plataforma adicional.
+
+El Proyecto FreeBSD diferencia los objetivos de la plataforma en cuatro niveles. Cada nivel incluye una lista de garantías en las que los consumidores pueden confiar, así como las obligaciones del Proyecto y los desarrolladores para cumplir con esas garantías. Estas listas definen las garantías mínimas para cada nivel. El Proyecto y los desarrolladores pueden proporcionar niveles adicionales de soporte más allá de las garantías mínimas para un nivel determinado, pero dicho soporte adicional no está garantizado. Cada objetivo de plataforma se asigna a un nivel específico para cada rama estable. Como resultado, un destino de plataforma podría asignarse a diferentes niveles en ramas estables concurrentes.
+
+=== Objetivos de plataforma
+
+El soporte para una plataforma de hardware consta de dos componentes: el soporte del kernel y las interfaces binarias de aplicaciones (ABI) del área de usuario. El soporte de la plataforma del kernel incluye las cosas necesarias para ejecutar un kernel FreeBSD en una plataforma de hardware, como la administración de memoria virtual dependiente de la máquina y los controladores de dispositivo. Una ABI de área de usuario especifica una interfaz para que los procesos de usuario interactúen con un núcleo de FreeBSD y bibliotecas del sistema base. Una ABI de área de usuario incluye interfaces de llamada al sistema, el diseño y la semántica de las estructuras de datos públicas y el diseño y la semántica de los argumentos que se pasan a las subrutinas. Algunos componentes de una ABI pueden definirse mediante especificaciones como el diseño de objetos de excepción de C ++ o convenciones de llamada para funciones de C.
+
+Un kernel de FreeBSD también usa una ABI (a veces denominada interfaz binaria del kernel (KBI)) que incluye la semántica y los diseños de las estructuras de datos públicas y el diseño y la semántica de los argumentos de las funciones públicas dentro del propio kernel.
+
+Un kernel de FreeBSD puede admitir múltiples ABI de usuario. Por ejemplo, el kernel amd64 de FreeBSD es compatible con las ABI de área de usuario amd64 e i386 de FreeBSD, así como con las ABI de área de usuario de Linux x86_64 e i386. Un kernel de FreeBSD debería admitir un "nativo" ABI como ABI predeterminado. El nativo "ABI" generalmente comparte ciertas propiedades con la ABI del kernel, como la convención de llamadas de C, tamaños de tipos básicos, etc.
+
+Los niveles se definen tanto para los núcleos como para las ABI del área de usuario. En el caso común, el kernel de una plataforma y las ABI de FreeBSD se asignan al mismo nivel.
+
+=== Nivel 1: Arquitecturas totalmente compatibles
+
+Las plataformas de nivel 1 son las plataformas FreeBSD más maduras. Están respaldados por el oficial de seguridad, la ingeniería de liberación y los equipos de administración del puerto. Se espera que las arquitecturas de nivel 1 sean de calidad de producción con respecto a todos los aspectos del sistema operativo FreeBSD, incluidos los entornos de instalación y desarrollo.
+
+El Proyecto FreeBSD ofrece las siguientes garantías a los consumidores de plataformas Tier 1:
+
+* Las imágenes oficiales de lanzamiento de FreeBSD serán proporcionadas por el equipo de ingenieros de lanzamiento.
+* Se proporcionarán actualizaciones binarias y parches de origen para avisos de seguridad y avisos de erratas para las versiones compatibles.
+* Se proporcionarán parches de origen para avisos de seguridad para las sucursales admitidas.
+* Las actualizaciones binarias y los parches de origen para los avisos de seguridad multiplataforma se proporcionarán normalmente en el momento del anuncio.
+* Los cambios en las ABI del área de usuario generalmente incluirán ajustes de compatibilidad para garantizar el funcionamiento correcto de los binarios compilados en cualquier rama estable donde la plataforma sea de nivel 1. Es posible que estos ajustes no estén habilitados en la instalación predeterminada. Si no se proporcionan calzas de compatibilidad para un cambio de ABI, la falta de calzas se documentará claramente en las notas de la versión.
+* Los cambios en ciertas partes de la ABI del kernel incluirán ajustes de compatibilidad para garantizar el funcionamiento correcto de los módulos del kernel compilados con la versión compatible más antigua de la rama. Tenga en cuenta que no todas las partes de la ABI del kernel están protegidas.
+* El equipo de ports proporcionará paquetes binarios oficiales para software de terceros. Para las arquitecturas integradas, estos paquetes pueden construirse de forma cruzada a partir de una arquitectura diferente.
+* Los puertos más relevantes deberían construir o tener los filtros apropiados para evitar que se construyan otros inapropiados.
+* Las nuevas características que no son inherentemente específicas de la plataforma serán completamente funcionales en todas las arquitecturas de Nivel 1.
+* Las características y las correcciones de compatibilidad utilizadas por los binarios compilados contra ramas estables más antiguas pueden eliminarse en versiones principales más recientes. Dichas eliminaciones se documentarán claramente en las notas de la versión.
+* Las plataformas de nivel 1 deben estar completamente documentadas. Las operaciones básicas se documentarán en el manual de FreeBSD.
+* Las plataformas de nivel 1 se incluirán en el árbol de fuentes.
+* Las plataformas de nivel 1 deben ser autohospedables, ya sea a través de la cadena de herramientas en árbol o una cadena de herramientas externa. Si se requiere una cadena de herramientas externa, se proporcionarán paquetes binarios oficiales para una cadena de herramientas externa.
+
+Para mantener la madurez de las plataformas de Nivel 1, el Proyecto FreeBSD mantendrá los siguientes recursos para apoyar el desarrollo:
+
+* Cree y pruebe el soporte de automatización, ya sea en el clúster de FreeBSD.org o en alguna otra ubicación fácilmente disponible para todos los desarrolladores. Las plataformas integradas pueden sustituir un emulador disponible en el clúster de FreeBSD.org por hardware real.
+* Inclusión en el `make universe` y `make tinderbox` objetivos.
+* Hardware dedicado en uno de los clústeres de FreeBSD para la construcción de paquetes (ya sea de forma nativa o mediante qemu-user).
+
+En conjunto, los desarrolladores deben proporcionar lo siguiente para mantener el estado de Nivel 1 de una plataforma:
+
+* Los cambios en el árbol de fuentes no deben romper conscientemente la construcción de una plataforma de Nivel 1.
+* Las arquitecturas de nivel 1 deben tener un ecosistema maduro y saludable de usuarios y desarrolladores activos.
+* Los desarrolladores deberían poder crear paquetes en sistemas de Nivel 1 no integrados y comúnmente disponibles. Esto puede significar compilaciones nativas si los sistemas no integrados están comúnmente disponibles para la plataforma en cuestión, o puede significar compilaciones cruzadas alojadas en alguna otra arquitectura de Nivel 1.
+* Los cambios no pueden romper la ABI del área de usuario. Si se requiere un cambio de ABI, la compatibilidad de ABI para binarios existentes debe proporcionarse mediante el uso de versiones de símbolos o cambios de versión de biblioteca compartida.
+* Los cambios combinados en ramas estables no pueden romper las partes protegidas de la ABI del kernel. Si se requiere un cambio de ABI del kernel, el cambio debe modificarse para preservar la funcionalidad de los módulos del kernel existentes.
+
+
+=== Nivel 2: Arquitecturas de desarrollo y de nicho
+
+Las plataformas de nivel 2 son plataformas FreeBSD funcionales, pero menos maduras. No cuentan con el apoyo del oficial de seguridad, la ingeniería de liberación y los equipos de administración del puerto.
+
+Las plataformas de nivel 2 pueden ser candidatas a plataformas de nivel 1 que aún se encuentran en desarrollo activo. Las arquitecturas que llegan al final de su vida útil también pueden pasar del estado de Nivel 1 al estado de Nivel 2 a medida que disminuye la disponibilidad de recursos para continuar manteniendo el sistema en un estado de Calidad de producción. Las arquitecturas de nicho bien soportadas también pueden ser de Nivel 2.
+
+El Proyecto FreeBSD proporciona las siguientes garantías a los consumidores de plataformas Tier 2:
+
+* La infraestructura de puertos debe incluir soporte básico para arquitecturas de Nivel 2 suficiente para soportar la construcción de puertos y paquetes. Esto incluye soporte para paquetes básicos como ports-mgmt / pkg, pero no hay garantía de que los puertos arbitrarios sean compilables o funcionales.
+* Las nuevas características que no son inherentemente específicas de la plataforma deberían ser factibles en todas las arquitecturas de Nivel 2 si no se implementan.
+* Las plataformas de nivel 2 se incluirán en el árbol de fuentes.
+* Las plataformas de nivel 2 deben autohospedarse a través de la cadena de herramientas en árbol o una cadena de herramientas externa. Si se requiere una cadena de herramientas externa, se proporcionarán paquetes binarios oficiales para una cadena de herramientas externa.
+* Las plataformas de nivel 2 deben proporcionar kernels funcionales y áreas de usuario incluso si no se proporciona una distribución de lanzamiento oficial.
+
+Para mantener la madurez de las plataformas Tier 2, el Proyecto FreeBSD mantendrá los siguientes recursos para apoyar el desarrollo:
+
+* Inclusión en el `make universe` y `make tinderbox` objetivos.
+
+En conjunto, los desarrolladores deben proporcionar lo siguiente para mantener el estado de Nivel 2 de una plataforma:
+
+* Los cambios en el árbol de fuentes no deberían romper a sabiendas la construcción de una plataforma de Nivel 2.
+* Las arquitecturas de nivel 2 deben tener un ecosistema activo de usuarios y desarrolladores.
+* Si bien se permite que los cambios rompan la ABI del área de usuario, la ABI no debe romperse gratuitamente. Los cambios significativos en la ABI del área de usuario deben restringirse a las versiones principales.
+* Las nuevas funciones que aún no se han implementado en las arquitecturas de nivel 2 deberían proporcionar un medio para desactivarlas en esas arquitecturas.
+
+
+=== Nivel 3: Arquitecturas experimentales
+
+Las plataformas de nivel 3 tienen al menos soporte parcial de FreeBSD. Son _no_ apoyado por el oficial de seguridad, la ingeniería de liberación y los equipos de gestión del puerto.
+
+Las plataformas de nivel 3 son arquitecturas en las primeras etapas de desarrollo, para plataformas de hardware no convencionales, o que se consideran sistemas heredados con pocas probabilidades de tener un uso amplio en el futuro. El soporte inicial para las plataformas de Nivel 3 puede existir en un repositorio separado en lugar del repositorio de origen principal.
+
+El Proyecto FreeBSD no ofrece garantías a los consumidores de plataformas Tier 3 y no se compromete a mantener los recursos para apoyar el desarrollo. Es posible que las plataformas de nivel 3 no siempre sean compilables, ni ningún núcleo o ABI de área de usuario se considera estable.
+
+=== Nivel 4: arquitecturas no admitidas
+
+Las plataformas de nivel 4 no son compatibles de ninguna forma con el proyecto.
+
+Todos los sistemas no clasificados de otra manera son sistemas de Nivel 4. Cuando una plataforma pasa al Nivel 4, todo el soporte para la plataforma se elimina de los árboles de origen y puertos. Tenga en cuenta que la compatibilidad con puertos debe permanecer siempre que la plataforma sea compatible con una rama admitida por puertos.
+
+=== Política sobre el cambio de nivel de una arquitectura
+
+Los sistemas solo se pueden mover de un nivel a otro con la aprobación del equipo central de FreeBSD, que tomará esa decisión en colaboración con el oficial de seguridad, la ingeniería de versiones y los equipos de administración de puertos. Para que una plataforma sea promovida a un nivel superior, las garantías de soporte que falten deben cumplirse antes de que se complete la promoción.
+
+[[ports]]
+== Preguntas frecuentes sobre puertos específicos
+
+[[ports-qa-add-new]]
+=== ¿Cómo agrego un nuevo puerto?
+
+Primero, lea la sección sobre copias del repositorio.
+
+La forma más sencilla de agregar un nuevo puerto es `addport` script ubicado en el [.filename]#ports/Tools/scripts# directorio. Agrega un puerto del directorio especificado, determinando la categoría automáticamente desde el puerto [.filename]#Makefile#. También agrega una entrada a la categoría del puerto. [.filename]#Makefile#. Fue escrito por Michael Haro mailto:mharo@FreeBSD.org[mharo@FreeBSD.org], Will Andrews mailto:will@FreeBSD.org[will@FreeBSD.org], and Renato Botelho mailto:garga@FreeBSD.org[garga@FreeBSD.org]. Al enviar preguntas sobre este script al http://lists.FreeBSD.org/mailman/listinfo/freebsd-ports[Lista de correo de puertos de FreeBSD], please also CC Chris Rees mailto:crees@FreeBSD.org[crees@FreeBSD.org], el mantenedor actual.
+
+[[ports-qa-add-new-extra]]
+=== ¿Alguna otra cosa que deba saber cuando agregue un nuevo puerto?
+
+Verifique el puerto, preferiblemente para asegurarse de que se compila y empaqueta correctamente. Esta es la secuencia recomendada:
+
+[source,bash]
+....
+# make install
+# make package
+# make deinstall
+# pkg add package you built above
+# make deinstall
+# make reinstall
+# make package
+....
+
+el link:{porters-handbook}[Manual de porteadores] contiene instrucciones más detalladas.
+
+Use man:portlint[1] para comprobar la sintaxis del puerto. No necesariamente tiene que eliminar todas las advertencias, pero asegúrese de haber solucionado las simples.
+
+Si el puerto proviene de un remitente que no ha contribuido al proyecto antes, agregue el nombre de esa persona al link:{contributors}#contrib-additional/[Colaboradores adicionales] de la lista de colaboradores de FreeBSD.
+
+Cierre el PR si el puerto entró como PR. Para cerrar un PR, cambie el estado a `Problema resuelto` y la resolución como `Fixed`.
+
+
+[[non-committers]]
+== Problemas específicos para desarrolladores que no son comprometidos
+
+Algunas personas que tienen acceso a las máquinas FreeBSD no tienen bits de confirmación. Casi todo este documento también se aplicará a estos desarrolladores (excepto los aspectos específicos de las confirmaciones y las membresías de la lista de correo que las acompañan). En particular, le recomendamos que lea:
+
+* <<admin,Detalles administrativos>>
+* <<conventions-everyone,Convenciones>>
++
+[NOTE]
+====
+Consigue que tu mentor te agregue a la "Colaboradores adicionales" ([.filename]#doc/en_US.ISO8859-1/articles/contributors/contrib.additional.xml#), si aún no está en la lista.
+====
+
+* <<developer.relations,Relaciones con el desarrollador>>
+* <<ssh.guide,Guía de inicio rápido de SSH>>
+* <<rules, La gran lista de reglas de los Committers de FreeBSD>>
+
+[[google-analytics]]
+== Información sobre Google Analytics
+
+A partir del 12 de diciembre de 2012, se habilitó Google Analytics en el sitio web del Proyecto FreeBSD para recopilar estadísticas de uso anónimas con respecto al uso del sitio. La información recopilada es valiosa para el Proyecto de documentación de FreeBSD, para identificar varios problemas en el sitio web de FreeBSD.
+
+[[google-analytics-policy]]
+=== Política general de Google Analytics
+
+El Proyecto FreeBSD se toma muy en serio la privacidad de los visitantes. Como tal, el sitio web del Proyecto FreeBSD honra la "No rastrear" header _before_ obteniendo el código de seguimiento de Google. Para obtener más información, consulte el https://www.FreeBSD.org/privacy.html[Política de privacidad de FreeBSD].
+
+El acceso a Google Analytics es _no_ Permitido arbitrariamente: el acceso debe ser solicitado, votado por el Equipo de Ingeniería de Documentación mailto:doceng@FreeBSD.org[doceng@FreeBSD.org], Y explícitamente concedido.
+
+Las solicitudes de datos de Google Analytics deben incluir un propósito específico. Por ejemplo, una razón válida para solicitar acceso sería "para ver los navegadores web más utilizados al visualizar páginas web de FreeBSD para garantizar que las velocidades de reproducción de la página sean aceptables."
+
+Por el contrario, "para ver qué navegadores web se utilizan con más frecuencia" (sin decir _porque_) sería rechazado.
+
+Todas las solicitudes deben incluir el período de tiempo durante el cual se requerirían los datos. Por ejemplo, debe indicarse explícitamente si los datos solicitados serían necesarios para un período de tiempo que abarque un período de 3 semanas, o si la solicitud sería única.
+
+Se rechazará cualquier solicitud de datos de Google Analytics sin una razón clara y razonable que beneficie al Proyecto FreeBSD.
+
+[[google-analytics-data]]
+=== Datos disponibles a través de Google Analytics
+
+Algunos ejemplos de los tipos de datos de Google Analytics disponibles incluyen:
+
+* Navegadores web de uso común
+* Tiempos de carga de la página
+* Acceso al sitio por idioma
+
+[[misc]]
+== Preguntas misceláneas
+
+=== ¿Cómo agrego un nuevo archivo a una rama?
+
+para agregar un archivo a una rama, simplemente realice el pago o actualice la rama a la que desea agregar y luego agregue el archivo usando la operación de agregar como lo haría normalmente. Esto funciona bien para `doc` y `ports` trees. The `src` árbol utiliza SVN y requiere más cuidado debido a la `mergeinfo` propiedades. Ver el <<subversion-primer,Subversion Primer>> para obtener detalles sobre cómo realizar un MFC.
+
+=== Como accedo people.FreeBSD.org poner información personal o del proyecto?
+
+`people.FreeBSD.org` Es lo mismo `freefall.FreeBSD.org`. solo cree un [.filename]#public_html# directorio. todo lo que coloque en ese directorio será visible automáticamente bajo https://people.FreeBSD.org/[https://people.FreeBSD.org/].
+
+=== ¿Dónde se almacenan los archivos de la lista de correo?
+
+Las listas de correo se archivan bajo [.filename]#/local/mail# en `freefall.FreeBSD.org`.
+
+=== Me gustaría ser mentor de un nuevo committer. ¿Qué proceso debo seguir?
+
+Ver el https://www.freebsd.org/internal/new-account.html[Procedimiento de creación de una nueva cuenta] documento en las páginas internas.
+
+[[benefits]]
+== Beneficios y ventajas para los confirmadores de FreeBSD
+
+[[benefits-recognition]]
+=== Reconocimiento
+
+El reconocimiento como ingeniero de software competente es el valor más duradero. Además, tener la oportunidad de trabajar con algunas de las mejores personas con las que todo ingeniero soñaría conocer es una gran ventaja!
+
+[[benefits-freebsdmall]]
+=== Centro comercial FreeBSD
+
+Los confirmadores de FreeBSD pueden obtener un juego de 4 CD o DVD gratis en conferencias de http://www.freebsdmall.com[FreeBSD Mall, Inc.].
+
+[[benefits-irc]]
+=== IRC
+
+Además, los desarrolladores pueden solicitar una máscara de host encubierta para su cuenta en la red IRC de Freenode en forma de `freebsd/developer/` _nombre de caída libre_ o `freebsd/developer/` _nombre con NickServ_. Para solicitar una capa, envíe un correo electrónico a mailto:irc@FreeBSD.org[irc@FreeBSD.org] con la máscara de host solicitada y el nombre de la cuenta NickServ.
+
+[[benefits-gandi]]
+=== `Gandi.net`
+
+Gandi ofrece servicios de alojamiento de sitios web, computación en la nube, registro de dominio y certificados X.509.
+
+Gandi ofrece un descuento de tarifa electrónica a todos los desarrolladores de FreeBSD. Enviar correo a mailto:non-profit@gandi.net[non-profit@gandi.net] usando tu `@freebsd.org` dirección de correo electrónico e indique su nombre de usuario de Gandi.

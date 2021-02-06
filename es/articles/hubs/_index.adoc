@@ -1,0 +1,291 @@
+---
+title: Crear replicas de FreeBSD
+authors:
+  - author: Jun Kuriyama
+    email: kuriyama@FreeBSD.org
+  - author: Valentino Vaschetto
+    email: logo@FreeBSD.org
+  - author: Daniel Lang
+    email: dl@leo.org
+  - author: Ken Smith
+    email: kensmith@FreeBSD.org
+releaseinfo: "$FreeBSD$" 
+trademarks: ["freebsd", "general"]
+---
+
+= Crear replicas de FreeBSD
+:doctype: article
+:toc: macro
+:toclevels: 1
+:icons: font
+:sectnums:
+:sectnumlevels: 6
+:source-highlighter: rouge
+:experimental:
+
+include::shared/es/mailing-lists.adoc[]
+include::shared/es/urls.adoc[]
+include::shared/releases.adoc[]
+
+[.abstract-title]
+Resumen
+
+Un artículo en progreso sobre cómo crear una replica de FreeBSD, destinado a los administradores de hub.
+
+'''
+
+toc::[]
+
+[NOTE]
+====
+No aceptamos nuevas replicas en este momento.
+====
+
+[[mirror-contact]]
+== Información de contacto
+
+Puede contactar con los coordinadores del sistema de replicas por correo electrónico en mirror-mailto:mirror-admin@FreeBSD.org[mirror-admin@FreeBSD.org]. También hay una http://lists.FreeBSD.org/mailman/listinfo/freebsd-hubs[lista de correo de los sitios de replicas de FreeBSD].
+
+[[mirror-requirements]]
+== Requisitos para las replicas de FreeBSD
+
+[[mirror-diskspace]]
+=== Espacio en disco
+
+El espacio en el disco es uno de los requisitos más importantes. Dependiendo del conjunto de lanzamientos, arquitecturas y grado de completitud que se quiera reflejar, se puede consumir una enorme cantidad de espacio en disco. También hay que tener en cuenta que los espejos _oficiales_ probablemente se requieren para estar completos. Las páginas web siempre deben ser reflejadas completamente. También tenga en cuenta que los números indicados aquí reflejan el estado actual (en la 12.0-RELEASE/11.3-RELEASE). El desarrollo y la publicación de nuevas versiones sólo aumentarán la cantidad requerida. También asegúrese de mantener un poco de espacio extra alrededor (aprox. 10-20%) sólo para estar seguros. Aquí hay algunas cifras aproximadas:
+
+* Distribución FTP completa: 1.4 TB
+* Deltas de CTM: 10GB
+* Páginas web: 1GB
+
+El uso de disco actual de la distribución FTP se puede encontrar en link:ftp://ftp.FreeBSD.org/pub/FreeBSD/dir.sizes[ftp://ftp.FreeBSD.org/pub/FreeBSD/dir.sizes].
+
+[[mirror-bandwidth]]
+=== Conexión de red/ancho de banda
+
+Por supuesto, necesita estar conectado a internet. El ancho de banda requerido depende del uso previsto para la replica. Si solo desea replicar algunas partes de FreeBSD para uso local en su sitio/intranet, la demanda puede ser mucho menor que si desea que los archivos estén disponibles públicamente. Si pretende convertirse en una replica oficial, el ancho de banda requerido será aún mayor. Aquí solo podemos dar estimaciones aproximadas:
+
+* Sitio local, sin acceso público: básicamente, no hay un mínimo, pero con < 2 Mbps puede que la sincronización sea muy lenta.
+* Sitio público no oficial: 34 Mbps es probablemente un buen comienzo.
+* Sitio oficial: se recomiendan > 100 Mbps, y su host debe estar conectado lo más cerca posible de su border router.
+
+[[mirror-system]]
+=== Requisitos del sistema, CPU, RAM
+
+Esto depende mucho del número de clientes esperado, que está determinado por la política del servidor. El tamaño también se ve afectado por el tipo de servicios que desea ofrecer. Los servicios FTP o HTTP simples pueden no requerir una gran cantidad de recursos. Tenga cuidado si proporciona rsync. Esto puede tener un gran impacto en los requisitos de CPU y memoria, ya que este servicio consume una gran cantidad de memoria. Los ejemplos siguientes tienen como objetivo darle una idea bastante aproximada.
+
+Para un sitio con un número de visitas moderado que ofrezca rsync, debería de considerar una CPU actual con aproximadamente 800MHz - 1 GHz, y, al menos 512MB de RAM. Este es, probablemente, el mínimo que desea para un sitio _oficial_.
+
+Si es un sitio con un número de visitas alto, definitivamente, necesita más RAM (2GB es un buen comienzo) y posiblemente más CPU, esto también significa la necesidad de ir hacia un sistema que disponga de SMP.
+
+También debería de considerar un sistema de discos rápido. Las operaciones en el repositorio SVN requieren de un sistema de discos que sea rápido (se recomienda RAID). Un controlador SCSI que disponga de una caché propia también puede acelerar las cosas, ya que la mayoría de estos servicios realizan una gran cantidad de pequeñas modificaciones en el disco.
+
+[[mirror-services]]
+=== Servicios a ofrecer
+
+Se require que cada replica tenga un conjunto de servicios centrales disponibles. Además de estos servicios que son requeridos, hay una serie de servicios opcionales que los administradores del servidor pueden escoger si ofrecerlos. Esta sección explica qué servicios puede proporcionar y cómo implementarlos.
+
+[[mirror-serv-ftp]]
+==== FTP (requerido para el conjunto de archivos FTP)
+
+Este es uno de los servicios más básicos, y es requerido en cada réplica que ofrezca distribuciones FTP públicas. El acceso a FTP debe ser anónimo, y no se permite ningún control sobre las tasas de subida/descarga (de todas formas, es ridículo). La subida de archivos no es necesaria (y nunca _debe_ permitirse en el área donde se guardan los archivos de FreeBSD). Además, los archivos de FreeBSD deben estar disponibles en la ruta [.filename]#/pub/FreeBSD#.
+
+Existe una gran cantidad de software disponible que se puede configurar para permitir FTP anónimo (en orden alfabético).
+
+* `/usr/libexec/ftpd`: Se puede usar el propio ftpd de FreeBSD. Asegurese de leer man:ftpd[8].
+* package:ftp/ncftpd[]: Un paquete comercial, gratis para uso educativo.
+* package:ftp/oftpd[]: Un ftpd diseñado con la seguridad como principal objetivo.
+* package:ftp/proftpd[]: Un ftpd modular y muy flexible.
+* package:ftp/pure-ftpd[]: Otro ftpd desarrollado con la seguridad como principal objetivo.
+* package:ftp/twoftpd[]: Lo mismo que el anterior.
+* package:ftp/vsftpd[]: Un ftpd "muy seguro".
+
+Entre los FTPs más utilizados en FreeBSD se encuentran ftpd, proftpd y quizá ncftpd. El resto no tienen una gran base de usuarios entre las sitios réplica. Una cosa a considerar es que puede necesitar flexibilidad para limitar la cantidad de conexiones simultáneas que se permiten, lo que limita la cantidad de ancho de banda y los recursos del sistema que se consumen.
+
+[[mirror-serv-rsync]]
+==== Rsync (opcional para el conjunto de archivos FTP)
+
+A menudo, se ofrece Rsync para acceder a los contenidos del área FTP de FreeBSD, de esta forma, otras réplicas pueden usar su sistema como su fuente. El protocolo es diferente de FTP es muchos aspectos. Es mucho más amigable con el ancho de banda, ya que solo se transfieren las diferencias entre los archivos en lugar del archivo completo. Rsync requiere una cantidad significativa de memoria para cada instancia. El tamaño depende del tamaño del módulo que se vaya a sincronizar, en términos de cantidad de directorios y archivos. Rsync puede usar `rsh` y `ssh` (por defecto) como transporte, o usar su propio protocolo para el acceso independiente (este es el método preferido para los servidores de rsync públicos). Autenticación, límites de conexión y otras restricciones pueden ser aplicadas. Solo hay un paquete de software disponible:
+
+* package:net/rsync[]
+
+[[mirror-serv-http]]
+==== HTTP (requerido para las páginas web, opcional para el conjunto de archivos FTP)
+
+Si quiere ofrecer las páginas web de FreeBSD, necesitará instalar un servidor web. Opcionalmente, puede ofrecer el conjunto de archivos FTP a través de HTTP. La elección del software del servidor web se deja en manos del administrador de la réplica. Algunas de las opciones más populares son:
+
+* package:www/apache24[]: Apache continua siendo uno de los servidores web más usados en Internet. Es ampliamente utilizado por el proyecto FreeBSD.
+* package:www/boa[]: Boa es un servidor HTTP single-task. A diferencia de los servidores web tradicionales, su proceso no se divide por cada conexión entrante, ni crea varias copias de si mismo para manejar múltiples conexiones. Aunque, debería de proporcionar un rendimiento considerablemente grande para contenido puramente estático.
+* package:www/cherokee[]: >Cherokee es un servidor web muy rápido, flexible y fácil de configurar. Es compatible con las tecnologías más extendidas en la actualidad: FastCGI, SCGI, PHP, CGI, conexiones cifradas SSL/TLS, vhosts, autenticación de usuarios, codificación on the fly y balanceo de carga. También genera archivos log compatibles con Apache.
+* package:www/lighttpd[]: lighttpd es un servidor web seguro, rápido, compatible con los estándares y muy flexible que ha sido optimizado para entornos de alto rendimiento. Tiene un consumo de memoria muy bajo en comparación con otros servidores web, así como un bajo consumo de CPU.
+* package:www/nginx[]: nginx es un servidor web de alto rendimiento con bajo consumo de memoria y características clave para crear una infraestructura web moderna y eficiente. Las características incluyen, un servidor HTTP, proxy inverso de HTTP y correo electrónico, almacenamiento en caché, balanceo de carga, compresión, limitación de solicitudes, multiplexación y reutilización de conexiones, descarga de SSL y streaming de medios por HTTP.
+* package:www/thttpd[]: Si va a ofrecer una gran cantidad de contenido estático, es posible que el uso de una aplicación como thttpd sea más eficiente que otras. También está optimizado para tener un excelente rendimiento en FreeBSD.
+
+[[mirror-howto]]
+== Cómo replicar FreeBSD
+
+Ok, ahora que ya conoce los requisitos y cómo ofrecer los servicios, pero no cómo obtenerlos. :-) Esta sección explica cómo replicar las distintas partes de FreeBSD, qué herramientas usar y de dónde tiene que replicar.
+
+[[mirror-ftp-rsync]]
+=== Replicar el sitio FTP
+
+El área FTP tiene la mayor cantidad de datos que deben ser reflejados. Incluye los _conjuntos de la distribución (distribution sets)_ necesarios para la instalación en red, las _ramas (branches)_ que son snapshots de los árboles del código fuente, las _imagenes ISO_ para grabar CD-ROMs con la distribución de instalación, un sistema de archivos live y un snapshot del árbol de ports. Y claro, todo esto para las diversas versiones y arquitecturas de FreeBSD.
+
+La mejor manera de replicar el área FTP es con rsync. Puede instalar el port package:net/rsync[] y después utilizar rsync para sincronizar con el host upstream. rsync se ha mencionado en <<mirror-serv-rsync>>. Como el acceso rsync no es necesario, es posible que su sitio upstream preferido pueda no permitirlo. Es posible que deba buscar un poco para encontrar un sitio que permita el acceso rsync.
+
+[NOTE]
+====
+Dado que el número de clientes de rsync tendrá un impacto significativo en el rendimiento del servidor, la mayoría de los administradores imponen limitaciones en sus servidores. Para una réplica, debe preguntar al mantenedor del sitio con el que se está sincronizando sobre su política, y tal vez, pedir una excepción para su host (ya que usted es una réplica).
+====
+
+Un ejemplo en la línea de comandos para réplicar FreeBSD podría ser de la siguiente forma:
+
+[source,bash]
+....
+% rsync -vaHz --delete rsync://ftp4.de.FreeBSD.org/FreeBSD/ /pub/FreeBSD/
+....
+
+Consulte la documentación de rsync, que está disponible en http://rsync.samba.org/[http://rsync.samba.org/], sobre las diversas opciones que se utilizarán con rsync. Si sincroniza todo el módulo (a diferencia de los subdirectorios), tenga en cuenta que el directorio de módulos (aquí "FreeBSD") no se creará, por lo que no puede omitir el directorio de destino. También es posible que desee configurar un script que llame a este comando a través de man:cron[8].
+
+[[mirror-www]]
+=== Replicando las páginas WWW
+
+El sitio de FreeBSD debe ser replicado solo a través de rsync.
+
+Un ejemplo en la línea de comandos para réplicar el sitio web de FreeBSD podría ser de la siguiente forma:
+
+[source,bash]
+....
+% rsync -vaHz --delete rsync://bit0.us-west.freebsd.org/FreeBSD-www-data/ /usr/local/www/
+....
+
+[[mirror-pkgs]]
+=== Replicando los paquetes
+
+Debido a las altas exigencias de ancho de banda, almacenamiento y administración, el proyecto FreeBSD ha decidido no permitir las réplicas públicas de paquetes. Para sitios con una gran cantidad de ordenadores, puede ser adecuado ejecutar un proxy HTTP que haga de caché para man:pkg[8]. De forma alternativa, los paquetes específicos y sus dependencias se pueden descargar ejecutando el siguiente comando:
+
+[source,bash]
+....
+% pkg fetch -d -o /usr/local/mirror vim
+....
+
+Cuando estos paquetes se descarguen, los metadatos del repositorio se deben generar ejecutando:
+
+[source,bash]
+....
+% pkg repo /usr/local/mirror
+....
+
+Una vez que los paquetes se han descargado y se han generado los metadatos del repositorio, envie los paquetes a los equipos cliente a través de HTTP. Para obtener información adicional, vea las páginas del maunal de man:pkg[8], en concreto, la página man:pkg-repo[8].
+
+[[mirror-how-often]]
+=== ¿Con qué frecuencia debo actualizar el contenido de mi replica?
+
+Toda réplica debe actualizarse como mínimo una vez al día. Sin duda, un script que bloqueé ejecuciones multiples al mismo tiempo debe ser ejecutado desde man:cron[8]. Dado que casi todos los administradores hacen esto a su manera, no se pueden proporcionar instrucciones específicas. Pero podría ser algo como lo siguiente:
+
+[.procedure]
+. Coloque el comando para ejecutar su réplica en un script. Se recomienda el uso de un script simple de `/bin/sh`.
+. Agregue algunas redirecciones de salida para que los mensajes de diagnóstico se registren en un archivo.
+. Compruebe si el script funciona. Compruebe los logs.
+. Use man:crontab[1] para agregar el script al man:crontab[5] del usuario correspondiente. Este debe ser un usuario diferente al que se ejecuta en su demonio FTP, de esta forma, si los permisos de los archivos dentro de su área FTP están configurados de forma que no puedan ser leidos por todo el mundo, no se podrá acceder a esos archivos mediante FTP anónimo. Esto se utiliza para hacer el "stage" de una release -- asegurándose de que todas las réplicas oficiales tengan todos los archivos necesarios el día del lanzamiento.
+
+Aquí hay algunas programaciones recomendadas:
+
+* Conjunto de archivos FTP: diario
+* Páginas WWW: diario
+
+[[mirror-where]]
+== De donde replicar
+
+Este es un tema importante. Así que esta sección hará un esfuerzo en explicar los antecedentes. Lo diremos varias veces: bajo ninguna circunstancia debe hacer una replica desde `ftp.FreeBSD.org`.
+
+[[mirror-where-organization]]
+=== Algunas palabras sobre la organización
+
+Las replicas se organizan por país. Todas las replicas oficiales tienen una entrada DNS con el formato `ftpN.CC.FreeBSD.org`. _CC_ (es decir, código de país) es el _dominio de nivel superior_ (TLD) del país donde se encuentra esta replica. _N_ es un número, el cual indicaque el host sería la replica _Nth_ en ese país (Se aplica lo mismo a `wwwN.CC.FreeBSD.org`, etc.). Hay replicas sin la parte _CC_. Estas replicas están muy bien conectadas y permiten una gran cantidad de usuarios concurrentes. Actualmente, `ftp.FreeBSD.org` son en realidad dos ordenadores, uno ubicado actualmente en Dinamarca y el otro en Estados Unidos. _NO_ es un sitio maestro y nunca debe ser replicado. Muchos documentos en línea conducen a los usuarios "interactivos" a `ftp.FreeBSD.org`, por lo que los sistemas automatizados de creación de replicas deben utilizar una máquina diferente de la que replicarse.
+
+Además, existe una jerarquía de replicas, descrita en términos de _capas (tiers)_. No se hace referencia a los sitios maestros, pero se pueden describir como _Tier-0_. Las replicas que replican estos sitios se pueden considerar _Tier-1_, las replicas _Tier-1_, son _Tier-2_, etc. Se recomienda que los sitios oficiales tenga un _tier_ bajo, pero cuanto más bajo el nivel, mayores los requisitos en los términos que se describen en <<mirror-requirements>>. Además, el acceso a las replicas de bajo nivel puede estar restringido, y el acceso a los sitios maestros está completamente restringido. La jerarquía de los _tiers_ no se refleja en el DNS y, por lo general, no está documentado en ninguna parte, excepto en los sitios maestros. Sin embargo, las replicas oficiales con números bajos como 1-4, por lo general son _Tier-1_ (esto es solo una sugerencia, y no una regla).
+
+[[mirror-where-where]]
+=== Ok, pero, ¿de dónde debo descargar los archivos?
+
+Bajo ninguna circunstancia debe crear una replica desde `ftp.FreeBSD.org`. La respuesta corta es: del sitio que esté más cerca de usted en términos de Internet o el cual le ofrezca el acceso más rápido.
+
+[[mirror-where-simple]]
+==== ¡Solo quiero crear una réplica de algún sitio!
+
+Si no tiene intenciones o requisitos especiales, se aplica lo indicado en <<mirror-where-where>>. Esto significa:
+
+[.procedure]
+. Busque aquellos que ofrezcan el acceso más rápido (número de saltos, tiempos de ida y vuelta) y ofrezca los servicios que desaa utilizar (como rsync).
+. Póngase en contacto con los administradores del sitio elegido, indicando su solicitud y preguntando acerca de sus términos y políticas.
+. Configure su replica como se describe anteriormente.
+
+[[mirror-where-official]]
+==== Soy una replica oficial, ¿cuál es el sitio correcto para mí?
+
+En general, lo descrito en la <<mirror-where-simple>> todavía es aplicable. Por supuesto, es posible que desee darle algo de importancia al hecho de que su upstream deba ser de un tier bajo. Hay algunas otras consideraciones sobre las replicas _oficiales_ que se describen en la <<mirror-official>>.
+
+[[mirror-where-master]]
+==== ¡Quiero acceder a los sitios maestros!
+
+Si tiene buenas razones y requisitos previos, puede que desee y quiera obtener acceso a uno de los sitios maestros. El acceso a estos sitios, generalmente, está restringido y existen políticas especiales para el acceso. Si ya es una replica _oficial_, esto seguramente le ayudará a obtener acceso. En cualquier otro caso, asegúrese de que su país realmente necesita otra replica. Si ya tiene tres o más, pregunte primero al "administrador de la zona" (mailto:hostmaster@CC.FreeBSD.org[hostmaster@CC.FreeBSD.org]) o en http://lists.FreeBSD.org/mailman/listinfo/freebsd-hubs[las listas de correo de las replicasa de FreeBSD].
+
+Quienquiera que le haya ayudado a convertirse en una replica oficial, un _oficial (official)_ debería de haberle ayudado a obtener acceso a un host upstream adecuado, ya sea uno de los sitios maestros o a un Tier-1 adecuado. De lo contrario, puede envair un correo electrónico solicitando ayuda a mailto:mirror-admin@FreeBSD.org[mirror-admin@FreeBSD.org].
+
+Hay un sitio maestro para el conjunto de archivos FTP.
+
+[[mirror-where-master-ftp]]
+===== ftp-master.FreeBSD.org
+
+Este es el sitio maestro para el conjunto de archivos FTP.
+
+`ftp-master.FreeBSD.org` proporciona acceso rsync, además de FTP. Consulte la <<mirror-ftp-rsync>>.
+
+También se recomienda que las replicas permitan el acceso rsync para los contenidos FTP, ya que son replicas _Tier-1_.
+
+[[mirror-official]]
+== Replicas oficiales
+
+Las replicas oficiales, son replicas que cumplen los siguientes puntos:
+
+* a) disponen de una entrada DNS `FreeBSD.org` (normalmente, un CNAME).
+* b) son listados como una replica oficial en la documentación de FreeBSD (como el handbook).
+
+Hasta ahora, para distinguir las replicas oficiales. Las replicas oficiales no tienen porque ser necesariamente replicas-_Tier-1_. Sin embargo, es muy probable que no encuentre una replica-_Tier-1_ que no sea oficial.
+
+[[mirror-official-requirements]]
+=== Requisitos especificos para las replicas oficiales (tier-1)
+
+No es tan sencillo establecer los requisitos para todas las replicas oficiales, ya que el proyecto es bastante tolerante en este punto. Es más sencillo decir qué se requiere de una _replica oficial tier-1_. El resto de replicas oficiales deberían de considerar esto como un gran _debemos de cumplir_.
+
+Las replicas tier-1 están obligadas a:
+
+* disponer del conjunto de archivos completo
+* permitir el acceso a otras replicas
+* disponer de acceso FTP y rsync
+
+Además, los administradores deben de estar suscritos a la http://lists.FreeBSD.org/mailman/listinfo/freebsd-hubs[lista de correo de las replicas de FreeBSD]. Consulte link:{handbook}#ERESOURCES-MAIL[este enlace] para obtener detalles sobre cómo suscribirse.
+
+[IMPORTANT]
+====
+Es _muy_ importante que el administrador de la replica, especialmente los administradores de replicas Tier-1, verifique el https://www.FreeBSD.org/releng/[calendario de lanzamientos] para el próximo lanzamiento de FreeBSD. Esto es importante porque le dirá cuándo será el próximo lanzamiento, y así tendrá tiempo para prepararse para el gran pico de tráfico que vendrá.
+
+También es importante que los administradores de las replicas intenten mantenerlas lo más actualizas posible (esto es crucial para las replicas Tier-1). Si el Mirror1 no se actualiza por un tiempo, las replicas de tiers menores comenzarán a replicar los datos antiguos del Mirror1 y, por lo tanto, comenzarán a caer en espiral... ¡Mantenga sus replicas actualizadas!
+====
+
+[[mirror-official-become]]
+=== ¿Entonces, cómo convertirse en una replica oficial?
+
+No estamos aceptando nuevas replicas en este momento.
+
+[[mirror-statpages]]
+== Algunas estadísticas de las replicas
+
+Aquí dispone de enlaces a las páginas de estadísticas de sus replicas favoritas (también conocidas como las únicas que desean proporcionarlas).
+
+[[mirror-statpagesftp]]
+=== Estadísticas de los sitios FTP
+
+* ftp.is.FreeBSD.org - mailto:hostmaster@is.FreeBSD.org[hostmaster@is.FreeBSD.org] - link:http://www.rhnet.is/status/draupnir/draupnir.html[ (Ancho de banda)] link:http://www.rhnet.is/status/ftp/ftp-notendur.html[(procesos FTP)] link:http://www.rhnet.is/status/ftp/http-notendur.html[(procesos HTTP)]
+* ftp2.ru.FreeBSD.org - mailto:mirror@macomnet.ru[mirror@macomnet.ru] - link:http://mirror.macomnet.net/mrtg/mirror.macomnet.net_195.128.64.25.html[(Ancho de banda)] link:http://mirror.macomnet.net/mrtg/mirror.macomnet.net_proc.html[(usuarios HTTP y FTP)]

@@ -1,0 +1,571 @@
+---
+title: Construye tu propio servidor de actualizaciones de FreeBSD
+authors:
+  - author: Jason Helfman
+    email: jgh@FreeBSD.org
+copyright: 2009-2011, 2013 Jason Helfman
+releaseinfo: "$FreeBSD$" 
+trademarks: ["freebsd", "amd", "intel", "general"]
+---
+
+= Construye tu propio servidor de actualizaciones de FreeBSD
+:doctype: article
+:toc: macro
+:toclevels: 1
+:icons: font
+:sectnums:
+:sectnumlevels: 6
+:source-highlighter: rouge
+:experimental:
+
+include::shared/authors.adoc[]
+include::shared/es/urls.adoc[]
+
+[.abstract-title]
+Resumen
+
+Este artículo describe cómo construir un FreeBSD Update Server propio. https://svnweb.freebsd.org/base/user/cperciva/freebsd-update-build/[freebsd-update-server] está escrito por Colin Percival mailto:cperciva@FreeBSD.org[cperciva@FreeBSD.org], oficial de seguridad emérito de FreeBSD. Para los usuarios que piensan que es conveniente actualizar sus sistemas desde un servidor de actualizaciones oficial, crear su propio FreeBSD Update Server puede ayudar a ampliar la funcionalidad al admitir las versiones de FreeBSD modificadas manualmente o al proporcionar una réplica local que permita actualizaciones más rápidas para un número concreto de ordenadores.
+
+'''
+
+toc::[]
+
+[[acknowledgments]]
+== Agradecimientos
+
+Este artículo fue publicado posteriormente en https://people.freebsd.org/~jgh/files/fus/BSD_03_2010_EN.pdf[BSD Magazine].
+
+[[introduction]]
+== Introducción
+
+Los usuarios experimentados o administradores a menudo son responsables de múltiples máquinas o entornos. Entienden las complicadas demandas y los desafíos de mantener una infraestructura de este tipo. Ejecutar un Servidor de actualizaciones de FreeBSD facilita la implementación de parches de seguridad y software en las máquinas de pruebas seleccionadas antes de implementarlos en producción. Esto también significa que se pueden actualizar varios sistemas desde la red local en lugar de una conexión a Internet la cual sea potencialmente más lenta. Este artículo describe los pasos necesarios para crear un servidor de actualizaciones de FreeBSD propio.
+
+[[prerequisites]]
+== Prerequisitos
+
+Para construir un Servidor de actualizaciones de FreeBSD propio se deben cumplir algunos requisitos.
+
+* Un sistema FreeBSD en ejecución.
++
+[NOTE]
+====
+Como mínimo, las actualizaciones requieren que cree una versión de FreeBSD que sea mayor o igual a la versión de la versión de destino para la distribución.
+====
+
+* Una cuenta de usuario con al menos 4 GB de espacio disponible. Esto permitirá la creación de actualizaciones para las versiones 7.1 y 7.2, los requisitos de espacio exactos pueden cambiar de una versión a otra.
+* Una cuenta con acceso man:ssh[1] en una máquina remota para cargar las actualizaciones.
+* Un servidor web, como link:{handbook}#network-apache[Apache], con más de la mitad del espacio necesario para la compilación. Por ejemplo, las compilaciones de prueba para las versiones 7.1 y 7.2 utilizan una cantidad total de 4 GB, y el espacio del servidor web necesario para distribuir estas actualizaciones es de 2.6 GB.
+* Conocimientos básicos de shell scripting con la shell Bournel, man:sh[1].
+
+[[Configuration]]
+== Configuración: Instalación & Configuración
+
+Descargue el software https://svnweb.freebsd.org/base/user/cperciva/freebsd-update-build/[ freebsd-update-server] instalando package:devel/subversion[] y package:security/ca_root_nss[], y ejecute:
+
+[source,bash]
+....
+% svn co https://svn.freebsd.org/base/user/cperciva/freebsd-update-build freebsd-update-server
+....
+
+Actualice el fichero [.filename]#scripts/build.conf# apropiadamente. Se crea durante todas las operaciones de construcción (build).
+
+Aquí está el archivo [.filename]#build.conf# predeterminado, que debe ser modificado para adaptarse a su entorno.
+
+[.programlisting]
+....
+# Archivo de configuración principal para las actualizaciones de FreeBSD.
+# Los datos de configuración específicos de la versión están más abajo
+# en el árbol de scripts.
+
+# Localización de la cual bajar las releases
+export FTP=ftp://ftp2.freebsd.org/pub/FreeBSD/releases
+
+# Plataforma del host
+export HOSTPLATFORM=`uname -m`
+
+# Host name a usar dentro de jails
+export BUILDHOSTNAME=${HOSTPLATFORM}-builder.daemonology.net
+
+# Localización de la clave SSH
+export SSHKEY=/root/.ssh/id_dsa
+
+# Cuenta SSH en la cual se suben los archivos
+MASTERACCT=builder@wadham.daemonology.net
+
+# Directorio en el cual se suben los archivos
+MASTERDIR=update-master.freebsd.org
+....
+
+Los parámetros a considerar son:
+Esta es la ubicación desde donde se descargan las imágenes ISO (mediante la subrutina `fetchiso()` de [.filename]#scripts/build.subr#). La ubicación configurada no se limita a URIs de FTP. Cualquier esquema URI compatible con la utilidad man:fetch[1] debería funcionar correctamente.Las personalizaciones en `fetchiso()` se pueden instalar copiando el script predeterminado [.filename]#build.subr# al área de releases y arquitectura específica en el directorio [.filename]#scripts/RELEASE/ARCHITECTURE/build.subr#y aplicar los cambios locales.
+El nombre del host de compilación. Esta información se mostrará en los sistemas que estén actualizados cuando se ejecute el comando:
+La clave SSH para subir archivos al servidor de actualizaciones. Se puede crear un par de claves ejecutando el comando `ssh-keygen -t dsa`. Este parámetro es opcional; la autenticación por contraseña estándar se utilizará como método de autenticación de reserva cuando `SSHKEY` no esté definido.La página del manual de man:ssh-keygen[1] contiene información más detallada sobre SSH y los pasos apropiados para crear y usar una clave.
+Cuenta para subir archivos al servidor de actualizaciones.
+Directorio en el servidor de actualización donde se subirán los archivos.
+
+El archivo [.filename]#build.conf# predeterminado incluido con el código fuente de freebsd-update-server es adecuado para compilar versiones i386 de FreeBSD. Como ejemplo de creación de un servidor de actualizaciones para otras arquitecturas, los siguientes pasos describen los cambios necesarios en la configuración para amd64:
+
+[.procedure]
+. Cree un entorno de compilación para amd64:
++
+[source,bash]
+....
+% mkdir -p /usr/local/freebsd-update-server/scripts/7.2-RELEASE/amd64
+....
++
+. Coloque el archivo [.filename]#build.conf# en el directorio de compilación que acaba de crear. Las opciones de configuración de la compilación para FreeBSD 7.2-RELEASE en la arquitectura amd64 deberían de ser similares a:
++
+[.programlisting]
+....
+# SHA256 hash de la imagen RELEASE de disc1.iso.
+export RELH=1ea1f6f652d7c5f5eab7ef9f8edbed50cb664b08ed761850f95f48e86cc71ef5
+
+# Componentes de world, source, y kernels
+export WORLDPARTS="base catpages dict doc games info manpages proflibs lib32"
+export SOURCEPARTS="base bin contrib crypto etc games gnu include krb5  \
+                lib libexec release rescue sbin secure share sys tools  \
+                ubin usbin cddl"
+export KERNELPARTS="generic"
+
+# Fecha EOL
+export EOL=1275289200
+....
++
+La clave man:sha256[1] utilizada para hacer el hash de la release deseada, se publica dentro del link:https://www.FreeBSD.org/releases/[anuncio de la respectiva release].
++
+Para generar el número "End of Life" para [.filename]#build.conf#, consulte el "Estimated EOL" publicado en el link:https://www.FreeBSD.org/security/[sitio web de seguridad de FreeBSD]. El valor de `EOL` se puede obtener de la fecha que figura en el sitio web, utilizando el comando man:date[1], por ejemplo:
+
+[[build]]
+== Compilando el código de actualización
+
+El primer paso es ejecutar [.filename]#scripts/make.sh#. Esto creará algunos binarios, creará directorios y generará una clave RSA utilizada para aprobar las compilaciones. En este paso, se deberá proporcionar una contraseña para la creación de la clave de firma.
+
+[source,bash]
+....
+# sh scripts/make.sh
+cc -O2 -fno-strict-aliasing -pipe   findstamps.c  -o findstamps
+findstamps.c: In function 'usage':
+findstamps.c:45: warning: incompatible implicit declaration of built-in function 'exit'
+cc -O2 -fno-strict-aliasing -pipe   unstamp.c  -o unstamp
+install findstamps ../bin
+install unstamp ../bin
+rm -f findstamps unstamp
+Generating RSA private key, 4096 bit long modulus
+................................................................................++
+...................++
+e is 65537 (0x10001)
+
+Public key fingerprint:
+27ef53e48dc869eea6c3136091cc6ab8589f967559824779e855d58a2294de9e
+
+Encrypting signing key for root
+enter aes-256-cbc encryption password:
+Verifying - enter aes-256-cbc encryption password:
+....
+
+[NOTE]
+====
+Guarde una copia de seguridad de la huella digital generada. Este valor es necesario en el archivo [.filename]#/etc/freebsd-update.conf# para las actualizaciones binarias.
+====
+
+En este punto, estamos listos para empezar el build.
+
+[source,bash]
+....
+# cd /usr/local/freebsd-update-server
+# sh scripts/init.sh amd64 7.2-RELEASE
+....
+
+Lo que se muestra a continuación es un ejemplo de la ejecución _inicial_ del build.
+
+[source,bash]
+....
+# sh scripts/init.sh amd64 7.2-RELEASE
+Mon Aug 24 16:04:36 PDT 2009 Starting fetch for FreeBSD/amd64 7.2-RELEASE
+/usr/local/freebsd-update-server/work/7.2-RELE100% of  588 MB  359 kBps 00m00s
+Mon Aug 24 16:32:38 PDT 2009 Verifying disc1 hash for FreeBSD/amd64 7.2-RELEASE
+Mon Aug 24 16:32:44 PDT 2009 Extracting components for FreeBSD/amd64 7.2-RELEASE
+Mon Aug 24 16:34:05 PDT 2009 Constructing world+src image for FreeBSD/amd64 7.2-RELEASE
+Mon Aug 24 16:35:57 PDT 2009 Extracting world+src for FreeBSD/amd64 7.2-RELEASE
+Mon Aug 24 23:36:24 UTC 2009 Building world for FreeBSD/amd64 7.2-RELEASE
+Tue Aug 25 00:31:29 UTC 2009 Distributing world for FreeBSD/amd64 7.2-RELEASE
+Tue Aug 25 00:32:36 UTC 2009 Building and distributing kernels for FreeBSD/amd64 7.2-RELEASE
+Tue Aug 25 00:44:44 UTC 2009 Constructing world components for FreeBSD/amd64 7.2-RELEASE
+Tue Aug 25 00:44:56 UTC 2009 Distributing source for FreeBSD/amd64 7.2-RELEASE
+Mon Aug 24 17:46:18 PDT 2009 Moving components into staging area for FreeBSD/amd64 7.2-RELEASE
+Mon Aug 24 17:46:33 PDT 2009 Identifying extra documentation for FreeBSD/amd64 7.2-RELEASE
+Mon Aug 24 17:47:13 PDT 2009 Extracting extra docs for FreeBSD/amd64 7.2-RELEASE
+Mon Aug 24 17:47:18 PDT 2009 Indexing release for FreeBSD/amd64 7.2-RELEASE
+Mon Aug 24 17:50:44 PDT 2009 Indexing world0 for FreeBSD/amd64 7.2-RELEASE
+
+Files built but not released:
+Files released but not built:
+Files which differ by more than contents:
+Files which differ between release and build:
+kernel|generic|/GENERIC/hptrr.ko
+kernel|generic|/GENERIC/kernel
+src|sys|/sys/conf/newvers.sh
+world|base|/boot/loader
+world|base|/boot/pxeboot
+world|base|/etc/mail/freebsd.cf
+world|base|/etc/mail/freebsd.submit.cf
+world|base|/etc/mail/sendmail.cf
+world|base|/etc/mail/submit.cf
+world|base|/lib/libcrypto.so.5
+world|base|/usr/bin/ntpq
+world|base|/usr/lib/libalias.a
+world|base|/usr/lib/libalias_cuseeme.a
+world|base|/usr/lib/libalias_dummy.a
+world|base|/usr/lib/libalias_ftp.a
+...
+....
+
+Entonces, se vuelve a realizar el build de word, con los parches de world. Puede encontrar una explicación más detallada en [.filename]#scripts/build.subr#.
+
+[WARNING]
+====
+Durante este segundo ciclo de compilación, el daemon del protocolo de tiempo de red, man:ntpd[8], está deshabilitado. De acuerdo con Colin Percival mailto:cperciva@FreeBSD.org[cperciva@FreeBSD.org], oficial de seguridad emérito de FreeBSD, "al compilar el código de https://svnweb.freebsd.org/base/user/cperciva/freebsd-update-build/[freebsd-update-server] necesita identificar las marcas de tiempo que se almacenan en los archivos para que puedan ignorarse al comparar compilaciones para determinar qué archivos necesitan actualizarse. Esta búsqueda de la marca de tiempo funciona con dos compilaciones, con 400 días de diferencia, y compara los resultados."
+====
+
+[source,bash]
+....
+Mon Aug 24 17:54:07 PDT 2009 Extracting world+src for FreeBSD/amd64 7.2-RELEASE
+Wed Sep 29 00:54:34 UTC 2010 Building world for FreeBSD/amd64 7.2-RELEASE
+Wed Sep 29 01:49:42 UTC 2010 Distributing world for FreeBSD/amd64 7.2-RELEASE
+Wed Sep 29 01:50:50 UTC 2010 Building and distributing kernels for FreeBSD/amd64 7.2-RELEASE
+Wed Sep 29 02:02:56 UTC 2010 Constructing world components for FreeBSD/amd64 7.2-RELEASE
+Wed Sep 29 02:03:08 UTC 2010 Distributing source for FreeBSD/amd64 7.2-RELEASE
+Tue Sep 28 19:04:31 PDT 2010 Moving components into staging area for FreeBSD/amd64 7.2-RELEASE
+Mon Aug 24 19:04:46 PDT 2009 Extracting extra docs for FreeBSD/amd64 7.2-RELEASE
+Mon Aug 24 19:04:51 PDT 2009 Indexing world1 for FreeBSD/amd64 7.2-RELEASE
+Mon Aug 24 19:08:04 PDT 2009 Locating build stamps for FreeBSD/amd64 7.2-RELEASE
+Mon Aug 24 19:10:19 PDT 2009 Cleaning staging area for FreeBSD/amd64 7.2-RELEASE
+Mon Aug 24 19:10:19 PDT 2009 Preparing to copy files into staging area for FreeBSD/amd64 7.2-RELEASE
+Mon Aug 24 19:10:20 PDT 2009 Copying data files into staging area for FreeBSD/amd64 7.2-RELEASE
+Mon Aug 24 12:16:57 PDT 2009 Copying metadata files into staging area for FreeBSD/amd64 7.2-RELEASE
+Mon Aug 24 12:16:59 PDT 2009 Constructing metadata index and tag for FreeBSD/amd64 7.2-RELEASE
+
+Files found which include build stamps:
+kernel|generic|/GENERIC/hptrr.ko
+kernel|generic|/GENERIC/kernel
+world|base|/boot/loader
+world|base|/boot/pxeboot
+world|base|/etc/mail/freebsd.cf
+world|base|/etc/mail/freebsd.submit.cf
+world|base|/etc/mail/sendmail.cf
+world|base|/etc/mail/submit.cf
+world|base|/lib/libcrypto.so.5
+world|base|/usr/bin/ntpq
+world|base|/usr/include/osreldate.h
+world|base|/usr/lib/libalias.a
+world|base|/usr/lib/libalias_cuseeme.a
+world|base|/usr/lib/libalias_dummy.a
+world|base|/usr/lib/libalias_ftp.a
+...
+....
+
+Finalmente, el build termina.
+
+[source,bash]
+....
+Values of build stamps, excluding library archive headers:
+v1.2 (Aug 25 2009 00:40:36)
+v1.2 (Aug 25 2009 00:38:22)
+@(#)FreeBSD 7.2-RELEASE #0: Tue Aug 25 00:38:29 UTC 2009
+FreeBSD 7.2-RELEASE #0: Tue Aug 25 00:38:29 UTC 2009
+    root@server.myhost.com:/usr/obj/usr/src/sys/GENERIC
+7.2-RELEASE
+Mon Aug 24 23:55:25 UTC 2009
+Mon Aug 24 23:55:25 UTC 2009
+##### built by root@server.myhost.com on Tue Aug 25 00:16:15 UTC 2009
+##### built by root@server.myhost.com on Tue Aug 25 00:16:15 UTC 2009
+##### built by root@server.myhost.com on Tue Aug 25 00:16:15 UTC 2009
+##### built by root@server.myhost.com on Tue Aug 25 00:16:15 UTC 2009
+Mon Aug 24 23:46:47 UTC 2009
+ntpq 4.2.4p5-a Mon Aug 24 23:55:53 UTC 2009 (1)
+ * Copyright (c) 1992-2009 The FreeBSD Project.
+Mon Aug 24 23:46:47 UTC 2009
+Mon Aug 24 23:55:40 UTC 2009
+Aug 25 2009
+ntpd 4.2.4p5-a Mon Aug 24 23:55:52 UTC 2009 (1)
+ntpdate 4.2.4p5-a Mon Aug 24 23:55:53 UTC 2009 (1)
+ntpdc 4.2.4p5-a Mon Aug 24 23:55:53 UTC 2009 (1)
+Tue Aug 25 00:21:21 UTC 2009
+Tue Aug 25 00:21:21 UTC 2009
+Tue Aug 25 00:21:21 UTC 2009
+Mon Aug 24 23:46:47 UTC 2009
+
+FreeBSD/amd64 7.2-RELEASE initialization build complete.  Please
+review the list of build stamps printed above to confirm that
+they look sensible, then run
+# sh -e approve.sh amd64 7.2-RELEASE
+to sign the release.
+....
+
+Aprobar el build si todo es correcto. Puede encontrar más información sobre cómo determinar si es correcto en el archivo [.filename]#USAGE#. Ejecute [.filename]#scripts/approve.sh#, como se indica. Esto firmará la release y moverá los componentes a un área de preparación adecuada para la subida.
+
+[source,bash]
+....
+# cd /usr/local/freebsd-update-server
+# sh scripts/mountkey.sh
+....
+
+[source,bash]
+....
+# sh -e scripts/approve.sh amd64 7.2-RELEASE
+Wed Aug 26 12:50:06 PDT 2009 Signing build for FreeBSD/amd64 7.2-RELEASE
+Wed Aug 26 12:50:06 PDT 2009 Copying files to patch source directories for FreeBSD/amd64 7.2-RELEASE
+Wed Aug 26 12:50:06 PDT 2009 Copying files to upload staging area for FreeBSD/amd64 7.2-RELEASE
+Wed Aug 26 12:50:07 PDT 2009 Updating databases for FreeBSD/amd64 7.2-RELEASE
+Wed Aug 26 12:50:07 PDT 2009 Cleaning staging area for FreeBSD/amd64 7.2-RELEASE
+....
+
+Una vez finalizado el proceso de aprobación, se puede iniciar el proceso de subida.
+
+[source,bash]
+....
+# cd /usr/local/freebsd-update-server
+# sh scripts/upload.sh amd64 7.2-RELEASE
+....
+
+[NOTE]
+====
+En caso de que se deban volver a subir las actualizaciones, esto se puede hacer cambiando al directorio de distribuciones públicas para la versión de destino y actualizando los atributos del archivo _subido_.
+
+[source,bash]
+....
+# cd /usr/local/freebsd-update-server/pub/7.2-RELEASE/amd64
+# touch -t 200801010101.01 uploaded
+....
+
+====
+
+Los archivos subidos deberán estar en el directorio raíz del servidor web para que las actualizaciones se distribuyan. La configuración exacta variará dependiendo del servidor web utilizado. Para el servidor web Apache, consulte la sección de link:{handbook}#network-apache[configuración del servidor Apache] en el Handbook.
+
+Actualice los archivos `KeyPrint` y `ServerName` en el archivo [.filename]#/etc/freebsd-update.conf#, y realice las actualizaciones como se indica en la sección de link:{handbook}#updating-upgrading-freebsdupdate[actualización de FreeBSD] en el manual.
+
+[IMPORTANT]
+====
+Para que el servidor de actualizaciones de FreeBSD funcione correctamente, deben compilarse las actualizaciones tanto para la versión _actual_ como para la _versión a la que se desea actualizar_. Esto es necesario para determinar las diferencias de archivos entre versiones. Por ejemplo, al actualizar un sistema FreeBSD de 7.1-RELEASE a 7.2-RELEASE, las actualizaciones deberán compilarse y subirse a su servidor de distribución para ambas versiones.
+====
+
+Como referencia, se adjunta toda la ejecución del script link:init.txt[init.sh].
+
+[[patch]]
+== Compilar un parche
+
+Cada vez que se publica un link:https://www.FreeBSD.org/security/advisories/[security advisory] o un link:https://www.FreeBSD.org/security/notices/[security notice], se puede crear un parche de actualización.
+
+Para este ejemplo, se utilizará 7.1-RELEASE.
+
+Para una versión de lanzamiento diferente, se da por hecho un par de suposiciones:
+
+* Que ha configurado la estructura de directorios correcta para la compilación inicial.
+* Que ha realizado una compilación inicial para la versión 7.1-RELEASE.
+
+Cree el directorio de parches para la versión correspondiente en [.filename]#/usr/local/freebsd-update-server/patches/#.
+
+[source,bash]
+....
+% mkdir -p /usr/local/freebsd-update-server/patches/7.1-RELEASE/
+% cd /usr/local/freebsd-update-server/patches/7.1-RELEASE
+....
+
+Como ejemplo, coja el parche para man:named[8]. Lea el advisory, y obtenga el archivo necesario de link:https://www.FreeBSD.org/security/advisories[FreeBSD Security Advisories]. Puede encontrar más información sobre la interpretación del advisory en el link:{handbook}#security-advisories[Handbook de FreeBSD].
+
+En el https://security.freebsd.org/advisories/FreeBSD-SA-09:12.bind.asc[informe de seguridad], este advisory se llama `SA-09:12.bind`. Después de descargar el archivo, es necesario cambiar el nombre del archivo a uno que indique el nivel adecuado del parche. Se sugiere mantener esto en consonancia con los niveles de los parches oficiales de FreeBSD, pero puede elegir libremente el nombre. Para esta compilación, sigamos la práctica establecida actualmente en FreeBSD y llamemosle `p7`. Renombre el archivo ejecutando el siguiente comando:
+
+[source,bash]
+....
+% cd /usr/local/freebsd-update-server/patches/7.1-RELEASE/; mv bind.patch 7-SA-09:12.bind
+....
+
+[NOTE]
+====
+Cuando se ejecuta la compilación del parche, se asume que los parches anteriores están en su sitio. Cuando se ejecute la compilación de los parches, se ejecutarán todos los parches que se encuentren en el directorio de parches.
+
+Puede haber parches personalizados adjuntos a cualquier compilación. Usa el número cero, o cualquier otro número.
+====
+
+[WARNING]
+====
+Es responsabilidad del administrador del servidor de actualizaciones de FreeBSD tomar las medidas adecuadas para verificar la autenticidad de cada parche.
+====
+
+En este punto, el _diff_ está listo para ser compilado. El software verifica primero si se ha ejecutado un [.filename]#scripts/init.sh# en la versión correspondiente antes de ejecutar la compilación.
+
+[source,bash]
+....
+# cd /usr/local/freebsd-update-server
+# sh scripts/diff.sh amd64 7.1-RELEASE 7
+....
+
+Lo que se muestra a continuación son las _diferencias_ del proceso de construcción.
+
+[source,bash]
+....
+# sh -e scripts/diff.sh amd64 7.1-RELEASE 7
+Wed Aug 26 10:09:59 PDT 2009 Extracting world+src for FreeBSD/amd64 7.1-RELEASE-p7
+Wed Aug 26 17:10:25 UTC 2009 Building world for FreeBSD/amd64 7.1-RELEASE-p7
+Wed Aug 26 18:05:11 UTC 2009 Distributing world for FreeBSD/amd64 7.1-RELEASE-p7
+Wed Aug 26 18:06:16 UTC 2009 Building and distributing kernels for FreeBSD/amd64 7.1-RELEASE-p7
+Wed Aug 26 18:17:50 UTC 2009 Constructing world components for FreeBSD/amd64 7.1-RELEASE-p7
+Wed Aug 26 18:18:02 UTC 2009 Distributing source for FreeBSD/amd64 7.1-RELEASE-p7
+Wed Aug 26 11:19:23 PDT 2009 Moving components into staging area for FreeBSD/amd64 7.1-RELEASE-p7
+Wed Aug 26 11:19:37 PDT 2009 Extracting extra docs for FreeBSD/amd64 7.1-RELEASE-p7
+Wed Aug 26 11:19:42 PDT 2009 Indexing world0 for FreeBSD/amd64 7.1-RELEASE-p7
+Wed Aug 26 11:23:02 PDT 2009 Extracting world+src for FreeBSD/amd64 7.1-RELEASE-p7
+Thu Sep 30 18:23:29 UTC 2010 Building world for FreeBSD/amd64 7.1-RELEASE-p7
+Thu Sep 30 19:18:15 UTC 2010 Distributing world for FreeBSD/amd64 7.1-RELEASE-p7
+Thu Sep 30 19:19:18 UTC 2010 Building and distributing kernels for FreeBSD/amd64 7.1-RELEASE-p7
+Thu Sep 30 19:30:52 UTC 2010 Constructing world components for FreeBSD/amd64 7.1-RELEASE-p7
+Thu Sep 30 19:31:03 UTC 2010 Distributing source for FreeBSD/amd64 7.1-RELEASE-p7
+Thu Sep 30 12:32:25 PDT 2010 Moving components into staging area for FreeBSD/amd64 7.1-RELEASE-p7
+Wed Aug 26 12:32:39 PDT 2009 Extracting extra docs for FreeBSD/amd64 7.1-RELEASE-p7
+Wed Aug 26 12:32:43 PDT 2009 Indexing world1 for FreeBSD/amd64 7.1-RELEASE-p7
+Wed Aug 26 12:35:54 PDT 2009 Locating build stamps for FreeBSD/amd64 7.1-RELEASE-p7
+Wed Aug 26 12:36:58 PDT 2009 Reverting changes due to build stamps for FreeBSD/amd64 7.1-RELEASE-p7
+Wed Aug 26 12:37:14 PDT 2009 Cleaning staging area for FreeBSD/amd64 7.1-RELEASE-p7
+Wed Aug 26 12:37:14 PDT 2009 Preparing to copy files into staging area for FreeBSD/amd64 7.1-RELEASE-p7
+Wed Aug 26 12:37:15 PDT 2009 Copying data files into staging area for FreeBSD/amd64 7.1-RELEASE-p7
+Wed Aug 26 12:43:23 PDT 2009 Copying metadata files into staging area for FreeBSD/amd64 7.1-RELEASE-p7
+Wed Aug 26 12:43:25 PDT 2009 Constructing metadata index and tag for FreeBSD/amd64 7.1-RELEASE-p7
+...
+Files found which include build stamps:
+kernel|generic|/GENERIC/hptrr.ko
+kernel|generic|/GENERIC/kernel
+world|base|/boot/loader
+world|base|/boot/pxeboot
+world|base|/etc/mail/freebsd.cf
+world|base|/etc/mail/freebsd.submit.cf
+world|base|/etc/mail/sendmail.cf
+world|base|/etc/mail/submit.cf
+world|base|/lib/libcrypto.so.5
+world|base|/usr/bin/ntpq
+world|base|/usr/include/osreldate.h
+world|base|/usr/lib/libalias.a
+world|base|/usr/lib/libalias_cuseeme.a
+world|base|/usr/lib/libalias_dummy.a
+world|base|/usr/lib/libalias_ftp.a
+...
+Values of build stamps, excluding library archive headers:
+v1.2 (Aug 26 2009 18:13:46)
+v1.2 (Aug 26 2009 18:11:44)
+@(#)FreeBSD 7.1-RELEASE-p7 #0: Wed Aug 26 18:11:50 UTC 2009
+FreeBSD 7.1-RELEASE-p7 #0: Wed Aug 26 18:11:50 UTC 2009
+    root@server.myhost.com:/usr/obj/usr/src/sys/GENERIC
+7.1-RELEASE-p7
+Wed Aug 26 17:29:15 UTC 2009
+Wed Aug 26 17:29:15 UTC 2009
+##### built by root@server.myhost.com on Wed Aug 26 17:49:58 UTC 2009
+##### built by root@server.myhost.com on Wed Aug 26 17:49:58 UTC 2009
+##### built by root@server.myhost.com on Wed Aug 26 17:49:58 UTC 2009
+##### built by root@server.myhost.com on Wed Aug 26 17:49:58 UTC 2009
+Wed Aug 26 17:20:39 UTC 2009
+ntpq 4.2.4p5-a Wed Aug 26 17:29:42 UTC 2009 (1)
+ * Copyright (c) 1992-2009 The FreeBSD Project.
+Wed Aug 26 17:20:39 UTC 2009
+Wed Aug 26 17:29:30 UTC 2009
+Aug 26 2009
+ntpd 4.2.4p5-a Wed Aug 26 17:29:41 UTC 2009 (1)
+ntpdate 4.2.4p5-a Wed Aug 26 17:29:42 UTC 2009 (1)
+ntpdc 4.2.4p5-a Wed Aug 26 17:29:42 UTC 2009 (1)
+Wed Aug 26 17:55:02 UTC 2009
+Wed Aug 26 17:55:02 UTC 2009
+Wed Aug 26 17:55:02 UTC 2009
+Wed Aug 26 17:20:39 UTC 2009
+...
+....
+
+Se muestran las actualizaciones y se le solicita aprobación.
+
+[source,bash]
+....
+New updates:
+kernel|generic|/GENERIC/kernel.symbols|f|0|0|0555|0|7c8dc176763f96ced0a57fc04e7c1b8d793f27e006dd13e0b499e1474ac47e10|
+kernel|generic|/GENERIC/kernel|f|0|0|0555|0|33197e8cf15bbbac263d17f39c153c9d489348c2c534f7ca1120a1183dec67b1|
+kernel|generic|/|d|0|0|0755|0||
+src|base|/|d|0|0|0755|0||
+src|bin|/|d|0|0|0755|0||
+src|cddl|/|d|0|0|0755|0||
+src|contrib|/contrib/bind9/bin/named/update.c|f|0|10000|0644|0|4d434abf0983df9bc47435670d307fa882ef4b348ed8ca90928d250f42ea0757|
+src|contrib|/contrib/bind9/lib/dns/openssldsa_link.c|f|0|10000|0644|0|c6805c39f3da2a06dd3f163f26c314a4692d4cd9a2d929c0acc88d736324f550|
+src|contrib|/contrib/bind9/lib/dns/opensslrsa_link.c|f|0|10000|0644|0|fa0f7417ee9da42cc8d0fd96ad24e7a34125e05b5ae075bd6e3238f1c022a712|
+...
+FreeBSD/amd64 7.1-RELEASE update build complete.  Please review
+the list of build stamps printed above and the list of updated
+files to confirm that they look sensible, then run
+# sh -e approve.sh amd64 7.1-RELEASE
+to sign the build.
+....
+
+Siga el mismo proceso descrito anteriormente para dar su aprobación a una compilación:
+
+[source,bash]
+....
+# sh -e scripts/approve.sh amd64 7.1-RELEASE
+Wed Aug 26 12:50:06 PDT 2009 Signing build for FreeBSD/amd64 7.1-RELEASE
+Wed Aug 26 12:50:06 PDT 2009 Copying files to patch source directories for FreeBSD/amd64 7.1-RELEASE
+Wed Aug 26 12:50:06 PDT 2009 Copying files to upload staging area for FreeBSD/amd64 7.1-RELEASE
+Wed Aug 26 12:50:07 PDT 2009 Updating databases for FreeBSD/amd64 7.1-RELEASE
+Wed Aug 26 12:50:07 PDT 2009 Cleaning staging area for FreeBSD/amd64 7.1-RELEASE
+
+The FreeBSD/amd64 7.1-RELEASE update build has been signed and is
+ready to be uploaded.  Remember to run
+# sh -e umountkey.sh
+to unmount the decrypted key once you have finished signing all
+the new builds.
+....
+
+Después de dar su aprobación a la compilación, suba el software al servidor de actualizaciones:
+
+[source,bash]
+....
+# cd /usr/local/freebsd-update-server
+# sh scripts/upload.sh amd64 7.1-RELEASE
+....
+
+Como referencia, se adjunta toda la ejecución del comando link:diff.txt[diff.sh].
+
+[[tips]]
+== Consejos
+
+* Si se crea una versión personalizada utilizando el link:{releng}#release-build[procedimiento]`make release` nativo, freebsd-update-server funcionará desde su versión. Como ejemplo, se puede crear una versión sin ports o documentación, borrando la funcionalidad correspondiente a las subrutinas `findextradocs ()`, `addextradocs ()` y cambiando la ubicación de descarga de `fetchiso ()`, respectivamente, en [.filename]#scripts/build.subr#. Como último paso, cambie el hash man:sha256[1] en el archivo [.filename]#build.conf# con su respectiva versión y arquitectura, y estará listo para crear su versión personalizada.
++
+[.programlisting]
+....
+# Compare ${WORKDIR}/release y ${WORKDIR}/$1, identifique qué partes
+# del subcomponente world|doc faltan en este último, y
+# construya el tarball con ellas.
+findextradocs () {
+}
+
+# Añadir documentos extra a ${WORKDIR}/$1
+addextradocs () { 
+}
+....
+
+* Añadir el flag `-j _NÚMERO_` a las secciones `buildworld` y `obj` en el script [.filename]#scripts/build.subr# puede acelerar la compilación, dependiendo del hardware utilizado, sin embargo, no es necesario. Se desaconseja el uso de este flag en otras secciones, ya que puede hacer que la compilación no sea fiable.
++
+[.programlisting]
+....
+              # Compilando world
+		   log "Compilando world"
+		   cd /usr/src &&
+		   make -j 2 ${COMPATFLAGS} buildworld 2>&1
+
+		# Distribuyendo world
+		   log "Distribuyendo world"
+		   cd /usr/src/release &&
+		   make -j 2 obj &&
+		   make ${COMPATFLAGS} release.1 release.2 2>&1
+....
+
+* Cree un registro link:{handbook}#network-dns[DNS] SRV para el servidor de actualizaciones y coloque el resto de registros detrás, con diferentes niveles de importancia. El uso de esta función proporcionará réplicas de actualización, sin embargo, este consejo no es necesario a menos que desee proporcionar un servicio redundante.
++
+[.programlisting]
+....
+_http._tcp.update.myserver.com.		IN SRV   0 2 80   host1.myserver.com.
+					IN SRV   0 1 80   host2.myserver.com.
+					IN SRV   0 0 80   host3.myserver.com.
+....

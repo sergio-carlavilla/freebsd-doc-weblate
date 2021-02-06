@@ -1,0 +1,673 @@
+---
+title: Autenticación LDAP
+authors:
+  - author: Toby Burress
+    email: kurin@causa-sui.net
+copyright: 2007-2008 The FreeBSD Documentation Project
+releaseinfo: "$FreeBSD$" 
+trademarks: ["freebsd", "general"]
+---
+
+= Autenticación LDAP
+:doctype: article
+:toc: macro
+:toclevels: 1
+:icons: font
+:sectnums:
+:sectnumlevels: 6
+:source-highlighter: rouge
+:experimental:
+
+[.abstract-title]
+Resumen
+
+Este documento pretende ser una guía para la configuración de un servidor LDAP (principalmente un servidor OpenLDAP) para la autenticación en FreeBSD. Esto es útil para situaciones en las que muchos servidores necesitan las mismas cuentas de usuario, por ejemplo, como reemplazo de NIS.
+
+'''
+
+toc::[]
+
+[[preface]]
+== Prólogo
+
+Este documento está destinado a proporcionar al lector una comprensión suficiente de LDAP para configurar un servidor LDAP. Este documento intentará proporcionar una explicación de package:net/nss_ldap[] y package:security/pam_ldap[] para usarlos con los servicios de la máquina del cliente para su uso con el servidor LDAP.
+
+Cuando termine, el lector debería poder configurar e implementar un servidor FreeBSD que pueda alojar un directorio LDAP, y configurar e implementar un servidor FreeBSD que pueda autenticarse en un directorio LDAP.
+
+Este artículo no pretende ser una explicación exhaustiva de las consideraciones de seguridad, robustez o mejores prácticas para configurar LDAP u otros de los servicios que se explicaran aquí. Aunque el autor tiene cuidado de hacer todo correctamente, no aborda los problemas de seguridad más allá del alcance general. Este artículo debe tenerse en cuenta para sentar las bases teóricas únicamente, y cualquier implementación real debe ir acompañado de un análisis cuidadoso de los requisitos.
+
+[[ldap]]
+== Configurando LDAP
+
+LDAP significa "Lightweight Directory Access Protocol (Protocolo Ligero/Simplificado de Acceso a Directorios)" y es un subconjunto del protocolo de acceso a directorios X.500. Sus últimas especificaciones están en http://www.ietf.org/rfc/rfc4510.txt[RFC4510] y amigos. En esencia, es una base de datos que espera ser leída con más frecuencia de la que se escribe.
+
+En los ejemplos de este documento se utilizará el servidor LDAP http://www.openldap.org/[OpenLDAP]; aunque los procedimientos deberían ser aplicables a los diferentes servidores, la mayor parte de la administración es específica de OpenLDAP. Hay varias versiones del servidor en la colección de ports, por ejemplo, package:net/openldap24-server[]. Los clientes necesitarán las librerias necesarias del paquete package:net/openldap24-client[].
+
+Hay (básicamente) dos áreas del servicio LDAP que necesitan configuración. El primero es configurar un servidor para recibir conexiones correctamente, y el segundo es añadir entradas al directorio del servidor para que las herramientas de FreeBSD sepan como interactuar con él.
+
+[[ldap-connect]]
+=== Configurar el servidor para las conexiones
+
+[NOTE]
+====
+Esta sección es específica de OpenLDAP. Si está utilizando otro servidor, deberá consultar la documentación de ese servidor.
+====
+
+[[ldap-connect-install]]
+==== Instalar OpenLDAP
+
+Primero, instale OpenLDAP:
+
+[[oldap-install]]
+.Instalar OpenLDAP
+[example]
+====
+
+[source,bash]
+....
+# cd /usr/ports/net/openldap24-server
+make install clean
+....
+
+====
+
+Esto instala los binarios `slapd` y `slurpd`, junto con las librerias requeridas por OpenLDAP.
+
+[[ldap-connect-config]]
+==== Configurar OpenLDAP
+
+A continuación, debemos configurar OpenLDAP.
+
+Es necesario que haga obligatorio el uso de cifrado en sus conexiones al servidor LDAP; de lo contrario, las contraseñas de sus usuarios se transferirán en texto plano, lo que se considera inseguro. Las herramientas que utilizaremos admiten dos tipos muy similares de encriptación, SSL y TLS.
+
+TLS significa "Transportation Layer Security (seguridad de la capa de transporte)". Los servicios que emplean TLS tienden a conectarse en los _mismos_ puertos que los mismos servicios sin TLS; por lo tanto, un servidor SMTP que admita TLS escuchará las conexiones en el puerto 25 y un servidor LDAP escuchará en el puerto 389.
+
+SSL significa "Secure Sockets Layer (capa de puertos seguros)", y los servicios que implementan SSL _no_ escuchan en los mismos puertos que sus equivalentes que no son SSL. Por lo tanto, SMTPS escucha en el puerto 465 (y no 25), HTTPS escucha en el puerto 443 y LDAPS en el 636.
+
+La razón por la que SSL utiliza un puerto diferente a TLS es porque una conexión TLS empieza como texto plano y cambia al tráfico cifrado después de la directiva `STARTTLS`. Las conexiones SSL se cifran desde el principio. Aparte de eso, no hay diferencias sustanciales entre ambos.
+
+[NOTE]
+====
+Configuraremos OpenLDAP para que utilice TLS, ya que SSL está obsoleto.
+====
+
+Una vez que OpenLDAP se ha instalado a través de la colección de ports, los siguientes parámetros de configuración en el archivo [.filename]#/usr/local/etc/openldap/slapd.conf# habilitarán TLS:
+
+[.programlisting]
+....
+security ssf=128
+
+TLSCertificateFile /path/to/your/cert.crt
+TLSCertificateKeyFile /path/to/your/cert.key
+TLSCACertificateFile /path/to/your/cacert.crt
+....
+
+Aquí, `ssf=128` le dice a OpenLDAP que es obligatorio el uso de un cifrado de 128 bits para todas las conexiones, tanto de búsqueda como de actualización. Este parámetro puede configurarse en función de las necesidades de seguridad de su sitio, rara vez necesitará hacer la encriptación más débil, ya que la mayoría de las librerias de clientes LDAP admiten un cifrado seguro.
+
+Los archivos [.filename]#cert.crt#, [.filename]#cert.key#, y [.filename]#cacert.crt# son necesarios para que los clientes le identifiquen a _usted_ como el servidor LDAP válido. Si simplemente desea un servidor que se esté ejecutando, puede crear un certificado autofirmado con OpenSSL:
+
+[[genrsa]]
+.Generar una clave RSA
+[example]
+====
+
+[source,bash]
+....
+% openssl genrsa -out cert.key 1024
+Generating RSA private key, 1024 bit long modulus
+....................++++++
+...++++++
+e is 65537 (0x10001)
+% openssl req -new -key cert.key -out cert.csr
+....
+
+====
+
+En este punto, se le solicitarán algunos valores. Puede introducir los valores que desee; sin embargo, es important que el valor "Common Name" sea el nombre de dominio completo del servidor OpenLDAP. En nuestro caso, y en los ejemplos del artículo, el servidor es _server.example.org_. Una incorrecta configuración de este valor hará que los clientes fallen al hacer la conexión. Esto puede causar una gran frustración, así que asegúrese de seguir estos pasos cuidadosamente.
+
+Finalmente, el certificado debe firmarse:
+
+[[self-sign]]
+.Autofirmar el certificado
+[example]
+====
+
+[source,bash]
+....
+% openssl x509 -req -in cert.csr -days 365 -signkey cert.key -out cert.crt
+Signature ok
+subject=/C=AU/ST=Some-State/O=Internet Widgits Pty Ltd
+Getting Private key
+....
+
+====
+
+Esto creará un certificado autofirmado que puede ser usado en la configuración en el archivo [.filename]#slapd.conf#, donde [.filename]#cert.crt# y [.filename]#cacert.crt# son el mismo archivo. Si piensa utilizar muchos servidores OpenLDAP (replicandolos a través de `slurpd`), querrá ver el <<ssl-ca>> para generar una clave de CA y usarla para firmar certificados de servidor individuales.
+
+Una vez hecho esto, ponga la siguiente línea en el archivo [.filename]#/etc/rc.conf#:
+
+[.programlisting]
+....
+slapd_enable="YES"
+....
+
+Después ejecute `/usr/local/etc/rc.d/slapd start`. Esto debería iniciar OpenLDAP. Confirme que está escuchando en el puerto 389 con el comando
+
+[source,bash]
+....
+% sockstat -4 -p 389
+ldap     slapd      3261  7  tcp4   *:389                 *:*
+....
+
+[[ldap-connect-client]]
+==== Configurar el cliente
+
+Instale el port package:net/openldap24-client[] para las librerias OpenLDAP. Los ordenadores cliente siempre tendrán las librerias OpenLDAP, ya que todo es compatible con package:security/pam_ldap[] y package:net/nss_ldap[] support, al menos por el momento.
+
+El archivo de configuración para las librerias OpenLDAP es [.filename]#/usr/local/etc/openldap/ldap.conf#. Edite este archivo para añadirle los siguientes valores:
+
+[.programlisting]
+....
+base dc=example,dc=org
+uri ldap://server.example.org/
+ssl start_tls
+tls_cacert /path/to/your/cacert.crt
+....
+
+[NOTE]
+====
+Es importante que sus clientes tengan acceso a [.filename]#cacert.crt#, de lo contrario no podrán conectarse.
+====
+
+[NOTE]
+====
+Hay dos archivos llamaados [.filename]#ldap.conf#. El primero es este archivo, que es para las librerias OpenLDAP y define cómo hablar con el servidor. El segundo es [.filename]#/usr/local/etc/ldap.conf# y es para pam_ldap.
+====
+
+En este punto, debería poder ejecutar el comando `ldapsearch -Z` en el ordenador cliente; `-Z` significa "use TLS". Si se produce un error, entonces algo está mal configurado; lo más probable que sean sus certificados. Utilice los comandos `s_client` y `s_server` de man:openssl[1] para asegurarse de tenerlos configurados y firmados correctamente.
+
+[[ldap-database]]
+=== Entradas en la base de datos
+
+La autenticación en un directorio LDAP se logra generalmente al intentar vincularse al directorio como el usuario que se conecta. Esto se realiza mediante el establecimiento de un enlace "simple" en el directorio con el nombre de usuario proporcionado. Si hay uan entrada con el `uid` igual al nombre de usuario y el atributo `userPassword` de la entrada coincide con la contraseña proporcionada, el enlace tiene éxito.
+
+Lo primero que tenemos que hacer es averiguar en qué parte del directorio estarán nuestros usuarios.
+
+La entrada base para nuestra base de datos es `dc=example,dc=org`. La ubicación predeterminada para los usuarios que la mayoría de los clientes parecen esperar es algo así como `ou=people,_base_`, así que eso es lo que se usará aquí. Sin embargo, tenga en cuenta que esto es configurable.
+
+Por lo tanto, la entrada ldif para la unidad organizativa de `people` será similar a:
+
+[.programlisting]
+....
+dn: ou=people,dc=example,dc=org
+objectClass: top
+objectClass: organizationalUnit
+ou: people
+....
+
+Todos los usuarios se crearán como subentradas de esta unidad organizativa.
+
+Se podría pensar en la clase de objeto a la que pertenecerán sus usuarios. Por defecto, la mayoría de las herramientas utilizarán `people`, lo cual está bien si simplemente desea proporcionar entradas para la autenticación. Sin embargo, si también va a almacenar información de usuario en la base de datos LDAP, probablemente quiera usar `inetOrgPerson`, el cual dispone de muchos atributos útiles. En cualquier caso, los esquemas relevantes deben introducirse en el archivo [.filename]#slapd.conf#.
+
+Para este ejemplo, utilizaremos el objeto `person`. Si está utilizando `inetOrgPerson`, los pasos son, básicamente, idénticos, excepto que es necesario el atributo `sn`.
+
+Para añadir el usuario `testuser`, el ldif sería:
+
+[.programlisting]
+....
+dn: uid=tuser,ou=people,dc=example,dc=org
+objectClass: person
+objectClass: posixAccount
+objectClass: shadowAccount
+objectClass: top
+uidNumber: 10000
+gidNumber: 10000
+homeDirectory: /home/tuser
+loginShell: /bin/csh
+uid: tuser
+cn: tuser
+....
+
+Yo empiezo los UIDs de mis usuarios de LDAP en el 10000 para evitar conflictos con las cuentas del sistema; puede establecer el número que desee aquí, siempre que sea inferior a 65536.
+
+También necesitamos entradas grupales. Son tan configurables como las entradas de usuario, pero usaremos los valores predeterminados que se muestran a continuación:
+
+[.programlisting]
+....
+dn: ou=groups,dc=example,dc=org
+objectClass: top
+objectClass: organizationalUnit
+ou: groups
+
+dn: cn=tuser,ou=groups,dc=example,dc=org
+objectClass: posixGroup
+objectClass: top
+gidNumber: 10000
+cn: tuser
+....
+
+Para insertarlos en su base de datos, puede usar `slapadd` o `ldapadd` en un archivo que contenga estas entradas. De forma alternativa, puede utilizar package:sysutils/ldapvi[].
+
+La utilidad `ldapsearch` en el ordenador del cliente debería devolver estas entradas. Si es así, la base de datos está configurada correctamente para ser utilizada como un servidor de autenticación LDAP.
+
+[[client]]
+== Configurar el cliente
+
+El cliente ya debería tener las librerias OpenLDAP de la <<ldap-connect-client>>, pero si está realizando la instalación en varios ordenadores, necesitará instalar package:net/openldap24-client[] en cada una de ellos.
+
+FreeBSD requiere de la instalación de dos ports para autenticarse en un servidor LDAP, package:security/pam_ldap[] y package:net/nss_ldap[].
+
+[[client-auth]]
+=== Autenticación
+
+package:security/pam_ldap[] se configura a través del archivo [.filename]#/usr/local/etc/ldap.conf#.
+
+[NOTE]
+====
+Este es un _archivo diferente_ al archivo de configuración de las funciones de la libreria OpenLDAP, [.filename]#/usr/local/etc/openldap/ldap.conf#; sin embargo, utiliza muchas de las mismas opciones; en realidad, es un superconjunto de este archivo. Para el resto de esta sección, las referencias a [.filename]#ldap.conf# significarán [.filename]#/usr/local/etc/ldap.conf#.
+====
+
+Por lo tanto, queremos copiar todos nuestros parámetros de configuración originales de [.filename]#openldap/ldap.conf# al nuevo [.filename]#ldap.conf#. Una vez hecho esto, le indicaremos a package:security/pam_ldap[] qué buscar en el servidor de directorio.
+
+Estamos identificando a nuestros usuarios con el atributo `uid`. Para configurar esto (aunque es el predeterminado), configure la directiva `pam_login_attribute` en [.filename]#ldap.conf#:
+
+[[set-pam-login-attr]]
+.Establecer `pam_login_attribute`
+[example]
+====
+[.programlisting]
+....
+pam_login_attribute uid
+....
+
+====
+
+Con esta configuración, package:security/pam_ldap[] buscará en el directorio LDAP completo en la `base` el valor `uid=_username_`. Si encuentra una y solo una entrada, intentará vincularse como ese usuario con la contraseña que se le proporcionó. Si se vincula correctamente, permitirá el acceso. De lo contrario, fallará.
+
+Los usuarios cuyo shell no esté en [.filename]#/etc/shells# no podrán iniciar sesión. Esto es muy importante cuando se configura Bash como la shell de usuario en el servidor LDAP. Bash no está incluido en la instalación estándar de FreeBSD. Cuando se instala desde un paquete o port, se encuentra en el directorio [.filename]#/usr/local/bin/bash#. Compruebe que la ruta a la shell en el servidor esté configurada correctamente:
+
+[source,bash]
+....
+% getent passwd username
+....
+
+Hay dos opciones cuando la salida muestra `/bin/bash` en la última columna. La primera es cambiar la entrada del usuario en el servidor LDAP a [.filename]#/usr/local/bin/bash#. La segunda opción es crear un enlace simbólico en el cliente LDAP para que Bash se encuentre en la ubicación correcta:
+
+[source,bash]
+....
+# ln -s /usr/local/bin/bash /bin/bash
+....
+
+Asegúrese de que [.filename]#/etc/shells# contenga entradas para `/usr/local/bin/bash` y `/bin/bash`. El usuario podrá iniciar sesión en el sistema con Bash como su shell.
+
+[[client-auth-pam]]
+==== PAM
+
+PAM, que significa "Pluggable Authentication Modules", es el método por el cual FreeBSD autentica la mayoría de sus sesiones. Para decirle a FreeBSD que queremos usar un servidor LDAP, tenedremos que añadir una línea al archivo PAM apropiado.
+
+La mayoría de las veces el archivo PAM apropiado es [.filename]#/etc/pam.d/sshd#, si desea usar SSH (recuerde configurar las opciones importantes en [.filename]#/etc/ssh/sshd_config#, de lo contrario, SSH no usará PAM).
+
+Para usar PAM para la autenticación, añada la línea
+
+[.programlisting]
+....
+auth  sufficient  /usr/local/lib/pam_ldap.so  no_warn
+....
+
+El sitio donde aparezca esta línea en el archivo y qué opciones tenga en la cuarta columna determina el comportamiento exacto del mecanismo de autenticación, vea man:pam.d[5]
+
+Con esta configuración, debería poder autenticar a un usuario en un directorio LDAP. PAM realizará un enlace con sus credenciales y, si tiene éxito, le indicará a SSH que permita el acceso.
+
+Sin embargo, no es buena idea permitir que _cada_ usuario del directorio pueda acceder a _todos_ los ordenadores clientes. Con la configuración actual, todo lo que necesita un usuario para iniciar sesión en una máquina es una entrada LDAP. Afortunadamente, hay alfunas formas de restringir el acceso de los usuarios.
+
+[.filename]#ldap.conf# admite la directiva `pam_groupdn`; cada cuenta que se conecta a este ordenador debe ser miembro del grupo especificado aquí. Por ejemplo, si tiene
+
+[.programlisting]
+....
+pam_groupdn cn=servername,ou=accessgroups,dc=example,dc=org
+....
+
+en [.filename]#ldap.conf#, solo los miembros de este grupo podrán iniciar sesión. Sin embargo. hay algunas cosas a tener en cuenta.
+
+Los miembros de este grupo se especifican en uno o más atributos `memberUid`, y cada atributo debe tener el nombre completo del miembro. Entonces `memberUid: someuser` no funcionará; debería ser:
+
+[.programlisting]
+....
+memberUid: uid=someuser,ou=people,dc=example,dc=org
+....
+
+Además, esta directiva no se verifica en PAM durante la autenticación, se verifica durante la administración de la cuenta, por lo que necesitará añadir más configuraciones en sus archivos de PAM en la sección de `account`. Esto, a su vez, requerirá que _cada_ usuario se incluya en el grupo, lo cual no es necesariamente lo que queremos. Para evitar bloquear usuarios que no están en LDAP, debe habilitar el atributo `ignore_unknown_user`. Finalmente, debe configurar la opción `ignore_authinfo_unavail` para que el usuario no quede bloqueado en todos los ordenadores cuando el servidor LDAP no esté disponible.
+
+Su archivo [.filename]#pam.d/sshd# debería quedar de la siguiente forma:
+
+[[pam]]
+.Ejemplo de [.filename]#pam.d/sshd#
+[example]
+====
+[.programlisting]
+....
+auth            required        pam_nologin.so          no_warn
+auth            sufficient      pam_opie.so             no_warn no_fake_prompts
+auth            requisite       pam_opieaccess.so       no_warn allow_local
+auth            sufficient      /usr/local/lib/pam_ldap.so      no_warn
+auth            required        pam_unix.so             no_warn try_first_pass
+
+account         required        pam_login_access.so
+account         required        /usr/local/lib/pam_ldap.so      no_warn ignore_authinfo_unavail ignore_unknown_user
+....
+
+====
+
+[NOTE]
+====
+Como estamos añadiendo estas líneas específicamente a [.filename]#pam.d/sshd#, esto solo tendrá efecto en las sesiones SSH. Los usuarios de LDAP no podrán iniciar sesión por consola. Para cambiar este comportamiento, examine los otros archivos en [.filename]#/etc/pam.d# y modifíquelos como corresponda.
+====
+
+[[client-nss]]
+=== Name Service Switch
+
+NSS es el servicio que asigna atributos a nombres. Entonces, por ejemplo, si un archivo es propiedad del usuario `1001`, una aplicación le consultará a NSS por el nombre de `1001`, y podría obtener `bob` o `ted` o cual sea el nombre del usuario.
+
+Ahora que nuestra información de usuario se mantiene en LDAP, debemos decirle a NSS que busque allí cuando se le consulte.
+
+El port package:net/nss_ldap[] hace esto. Utiliza el mismo archivo de configuración que package:security/pam_ldap[], y no debería necesitar ningún parámetro adicional después de su instalación. En cambio, solo quedaría editar el archivo [.filename]#/etc/nsswitch.conf# para aprovechar el directorio. Simplemente cambie las siguientes líneas:
+
+[.programlisting]
+....
+group: compat
+passwd: compat
+....
+
+por
+
+[.programlisting]
+....
+group: files ldap
+passwd: files ldap
+....
+
+Esto le permitirá asignar nombres de usuario a UIDs y UIDs a nombres de usuario.
+
+¡Felicidades! Ahora debería tener la autenticación de LDAP en funcionamiento.
+
+[[caveats]]
+=== Advertencias
+
+Unfortunately, as of the time this was written FreeBSD did not support changing user passwords with man:passwd[1]. Because of this, most administrators are left to implement a solution themselves. I provide some examples here. Note that if you write your own password change script, there are some security issues you should be made aware of; see <<security-passwd>>
+
+[[chpw-shell]]
+.Shell Script para cambiar contraseñas
+[example]
+====
+[.programlisting]
+....
+#!/bin/sh
+
+stty -echo
+read -p "Old Password: " oldp; echo
+read -p "New Password: " np1; echo
+read -p "Retype New Password: " np2; echo
+stty echo
+
+if [ "$np1" != "$np2" ]; then
+  echo "Passwords do not match."
+  exit 1
+fi
+
+ldappasswd -D uid="$USER",ou=people,dc=example,dc=org \
+  -w "$oldp" \
+  -a "$oldp" \
+  -s "$np1"
+....
+
+====
+
+[CAUTION]
+====
+Este script apenas verifica errores, pero, lo más importante, es el poco cuidado con el que almacena sus contraseñas. Si hace algo como esto, establezca al menos el calor de `security.bsd.see_other_uids`:
+
+[source,bash]
+....
+# sysctl security.bsd.see_other_uids=0
+....
+
+====
+
+Se puede utilizar un enfoque más flexible (y probablemente más seguro) escribiendo un programa personalizado o incluso una interfaz web. Lo siguiente es parte de una libreria de Ruby que puede cambiar las contraseñas LDAP. Se puede usar tanto por línea de comandos y en la web.
+
+[[chpw-ruby]]
+.Script en Ruby para cambiar las contraseñas
+[example]
+====
+[.programlisting]
+....
+require 'ldap'
+require 'base64'
+require 'digest'
+require 'password' # ruby-password
+
+ldap_server = "ldap.example.org"
+luser = "uid=#{ENV['USER']},ou=people,dc=example,dc=org"
+
+# get the new password, check it, and create a salted hash from it
+def get_password
+  pwd1 = Password.get("New Password: ")
+  pwd2 = Password.get("Retype New Password: ")
+
+  raise if pwd1 != pwd2
+  pwd1.check # check password strength
+
+  salt = rand.to_s.gsub(/0\./, '')
+  pass = pwd1.to_s
+  hash = "{SSHA}"+Base64.encode64(Digest::SHA1.digest("#{pass}#{salt}")+salt).chomp!
+  return hash
+end
+
+oldp = Password.get("Old Password: ")
+newp = get_password
+
+# We'll just replace it.  That we can bind proves that we either know
+# the old password or are an admin.
+
+replace = LDAP::Mod.new(LDAP::LDAP_MOD_REPLACE | LDAP::LDAP_MOD_BVALUES,
+                        "userPassword",
+                        [newp])
+
+conn = LDAP::SSLConn.new(ldap_server, 389, true)
+conn.set_option(LDAP::LDAP_OPT_PROTOCOL_VERSION, 3)
+conn.bind(luser, oldp)
+conn.modify(luser, [replace])
+....
+
+====
+
+Aunque no se garantiza que esté a salvo de agujeros de seguridad (la contraseña se guarda en memoria, por ejemplo), esto es más limpio y más flexible que un simple script `sh`.
+
+[[secure]]
+== Consideraciones de seguridad
+
+Ahora que sus ordenadores (y posiblemente otros servicios) se están autenticando contra su servidor LDAP, este servidor debe estar protegido, así como [.filename]#/etc/master.passwd# estaría en un servidor normal, y posiblemente aún más desde un servidor LDAP corrupto rompería todos los servicios del cliente.
+
+Recuerde, esta sección no es exhaustiva. Debe revisar continuamente su configuración y procedimientos de mejora.
+
+[[secure-readonly]]
+=== Establecer atributos de solo lectura
+
+Hay varios atributos en LDAP que deben ser de solo lectura. Si el usuario pudiera tener acceso de escritura, por ejemplo, ¡un usuario podría cambiar su atributo `uidNumber` a `0` y obtener permisos de `root`!
+
+Para empezar, el atributo `userPassword` no debe ser legible por todo el mundo. Por defecto, cualquiera que pueda conectarse al servidor LDAP puede leer este atributo. Para deshabilitar esto, coloque la siguiente configuración en el archivo [.filename]#slapd.conf#:
+
+[[hide-userpass]]
+.Ocultar contraseñas
+[example]
+====
+[.programlisting]
+....
+access to dn.subtree="ou=people,dc=example,dc=org"
+  attrs=userPassword
+  by self write
+  by anonymous auth
+  by * none
+
+access to *
+  by self write
+  by * read
+....
+
+====
+
+Esto deshabilitará la posibilidad de leer el atributo `userPassword` y al mismo tiempo permitirá a los usuarios cambiar sus propias contraseñas.
+
+Además, querrá evitar que los usuarios cambien algunos de sus propios atributos. De forma predeterminada, los usuarios pueden cambiar cualquier atributo (excepto aquellos en los que los esquemas LDAP mismos niegan cambios), como `uidNumber`. Para cerrar este agujero, modifique lo anterior a
+
+[[attrib-readonly]]
+.Atributos de solo lectura
+[example]
+====
+[.programlisting]
+....
+access to dn.subtree="ou=people,dc=example,dc=org"
+  attrs=userPassword
+  by self write
+  by anonymous auth
+  by * none
+
+access to attrs=homeDirectory,uidNumber,gidNumber
+  by * read
+
+access to *
+  by self write
+  by * read
+....
+
+====
+
+Esto evitará que los usuarios puedan hacerse pasar por otros usuarios.
+
+[[secure-root]]
+=== Definición de la cuenta `root`
+
+A menudo, la cuenta de administrador o `root` para el servicio LDAP se definirá en el archivo de configuración. OpenLDAP soporta esto, por ejemplo, y funciona, pero puede generar problemas si [.filename]#slapd.conf# se ve comprometido. Puede ser mejor usar esto solo para iniciarse en LDAP y luego definir una cuenta `root` ahí.
+
+Lo mejor es definir cuentas con permisos limitados y omitir por completo una cuenta `root`. Por ejemplo, los usuarios que puedan añadir o eliminar cuentas de usuario se añadiran a un grupo, pero ellos mismos no pueden cambiar la pertenencia de este grupo. Dicha política de seguridad ayudará a mitigar los efectos de una contraseña filtrada.
+
+[[manager-acct]]
+==== Crear un grupo de mantenimiendo
+
+Supongamos que desea que su departamento de TI pueda cambiar los directorios home de los usuarios, pero no quiere que todos puedan añadir o eliminar usuarios. La forma de hacerlo es agregar un grupo para estos administradores:
+
+[[manager-acct-dn]]
+.Crear un grupo de mantenimiendo
+[example]
+====
+[.programlisting]
+....
+dn: cn=homemanagement,dc=example,dc=org
+objectClass: top
+objectClass: posixGroup
+cn: homemanagement
+gidNumber: 121 # required for posixGroup
+memberUid: uid=tuser,ou=people,dc=example,dc=org
+memberUid: uid=user2,ou=people,dc=example,dc=org
+....
+
+====
+
+Y luego cambie los atributos de los permisos en [.filename]#slapd.conf#:
+
+[[management-acct-acl]]
+.ACLs para el grupo de administración del directorio home
+[example]
+====
+[.programlisting]
+....
+access to dn.subtree="ou=people,dc=example,dc=org"
+  attr=homeDirectory
+  by dn="cn=homemanagement,dc=example,dc=org"
+  dnattr=memberUid write
+....
+
+====
+
+Ahora `tuser` y `user2` pueden cambiar los directorios home de otros usuarios.
+
+En este ejemplo, hemos otorgado un subconjunto de poderes administrativos a ciertos usuarios sin darles poder en otros dominios. La idea es que ninguna cuenta de usuario individual tenga el poder de una cuenta `root`, pero cada usuario root tiene al menos un usuario. La cuenta `root` es innecesaria y puede eliminarse.
+
+[[security-passwd]]
+=== Almacenamiento de contraseña
+
+Por defecto, OpenLDAP almacenará el valor del `userPassword` de la misma forma que almacena cualquier otro dato: en texto plano. La mayoría de las veces, está codificado en base 64, lo que proporciona protección suficiente para evitar que un administrador honesto sepa su contraseña, pero poco más.
+
+Por lo tanto, es buena idea almacenar las contraseñas en un formato más seguro, como SSHA (salted SHA). Esto lo hace cualquier programa que use para cambiar las contraseñas de los usuarios.
+
+:sectnums!:
+
+[appendix]
+[[useful]]
+== Consideraciones útiles
+
+Hay otros programas que pueden ser útiles, especialmente si tiene muchos usuarios y no desea configurarlo todo manualmente.
+
+package:security/pam_mkhomedir[] es un módulo de PAM que siempre funciona; su propósito es crear directorios home para los usuarios que no los tienen. Si tiene docenas de servidores cliente y cientos de usuarios, es mucho más facil usarlo y configurar un directorio mínimo para cada directorio home.
+
+package:sysutils/cpu[] es una utilidad similar a man:pw[8], que se puede utilizar para administrar usuarios en el directorio LDAP. Puede llamarlo directamente o ajustar los scripts para que lo utilicen. Puede manejar tanto TLS (con el flag `-x`) como SSL (directamente).
+
+package:sysutils/ldapvi[] es una utilidad de gran ayuda para editar valores LDAP en una sintaxis similar a LDIF. El directorio (o subsección del directorio) se presenta en el editor elegido por la variable de entorno `EDITOR`. Esto facilita la realización de cambios de directorio a gran escala sin escribir una herramienta personalizada.
+
+package:security/openssh-portable[] tiene la capacidad de contactar a un servidor LDAP para verificar las claves SSH. Esto es extremadamente útil si tiene muchos servidores y no desea copiar sus claves públicas en todos.
+
+:sectnums!:
+
+[appendix]
+[[ssl-ca]]
+== Certificados OpenSSL para LDAP
+
+Si aloja dos o más servidores LDAP, probablemente no quiera utilizar certificados autofirmados, ya que cada cliente deberá estar configurado para funcionar con cada certificado. Si bien esto es posible, no es tan simple como crear su propia autoridad de certificación y firmar los certificados de sus servidores con ella.
+
+Las instrucciones aquí se presentan tal como son, con muy pocas intenciones de explicar lo que está sucediendo--puede encontrar más explicaciones en man:openssl[1] y aplicaciones similares.
+
+Para crear una autoridad de certificación, simplemente necesitamos un certificado autofirmado y una clave. De nuevo, las instrucciones son
+
+[[make-cert]]
+.Crear un certificado
+[example]
+====
+
+[source,bash]
+....
+% openssl genrsa -out root.key 1024
+% openssl req -new -key root.key -out root.csr
+% openssl x509 -req -days 1024 -in root.csr -signkey root.key -out root.crt
+....
+
+====
+
+Estos serán su clave CA y certificado root. Probablemente desee cifrar la clave y almacenarla en un lugar freso y seco; cualquier persona con acceso a ella puede hacerse pasar por uno de sus servidores LDAP.
+
+A continuación, utilizando los dos pasos anteriores, cree la clave [.filename]#ldap-server-one.key# y la solicitud de firma de certificado [.filename]#ldap-server-one.csr#. Una vez que firme la solicitud con la clave [.filename]#root.key#, podrá usar [.filename]#ldap-server-one.*# en sus servidores LDAP.
+
+[NOTE]
+====
+
+No olvide utilizar un fully qualified domain name (nombre de dominio altamente cualificado) para el atributo "common name" al generar la solicitud de firma del certificado; de lo contrario, los clientes rechazarán la conexión y puede que ser muy difícil de diagnosticar.
+====
+
+Para firmar la clave, utilice `-CA` y `-CAkey` en lugar de `-signkey`:
+
+[[ca-sign]]
+.Firmar como autoridad de certificación
+[example]
+====
+
+[source,bash]
+....
+% openssl x509 -req -days 1024 \
+-in ldap-server-one.csr -CA root.crt -CAkey root.key \
+-out ldap-server-one.crt
+....
+
+====
+
+El archivo resultante será el certificado que pueda utilizar en sus servidores LDAP.
+
+Finalmente, para que los clientes confíen en todos sus servidores, distribuya el archivo [.filename]#root.crt# (¡el _certificado_, no la clave!) a cada cliente y especifíquelo en la directiva `TLSCACertificateFile` en el archivo [.filename]#ldap.conf#.

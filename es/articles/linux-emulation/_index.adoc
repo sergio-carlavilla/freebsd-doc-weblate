@@ -1,0 +1,953 @@
+---
+title: Emulación de Linux en FreeBSD
+authors:
+  - author: Roman Divacky
+    email: rdivacky@FreeBSD.org
+releaseinfo: "$FreeBSD$" 
+trademarks: ["freebsd", "ibm", "adobe", "netbsd", "realnetworks", "oracle", "linux", "sun", "general"]
+---
+
+= Emulación de Linux(R) en FreeBSD
+:doctype: article
+:toc: macro
+:toclevels: 1
+:icons: font
+:sectnums:
+:sectnumlevels: 6
+:source-highlighter: rouge
+:experimental:
+
+include::shared/authors.adoc[]
+
+[.abstract-title]
+Resumen
+
+Esta tesis de maestría trata sobre la actualización del Linux(TM) capa de emulación (la llamada _Linuxulator_). La tarea consistía en actualizar la capa para que coincidiera con la funcionalidad de Linux(TM) 2.6. Como implementación de referencia, el Linux(TM)Se eligió el kernel 2.6.16. El concepto se basa libremente en la implementación de NetBSD. La mayor parte del trabajo se realizó en el verano de 2006 como parte del programa para estudiantes de Google Summer of Code. El foco estaba en traer el _NPTL_ (new POSIX(TM) biblioteca de hilos) en la capa de emulación, incluyendo _TLS_ (hilo de almacenamiento local), _futexes_ (mutex rápidos del espacio de usuario), _PID destrozar_, y algunas otras cosas menores. Se identificaron y solucionaron muchos pequeños problemas en el proceso. Mi trabajo se integró en el repositorio de fuentes principal de FreeBSD y se enviará en la próxima versión 7.0R. Nosotros, el equipo de desarrollo de la emulación, estamos trabajando para hacer Linux(TM) 2.6 emulación la capa de emulación predeterminada en FreeBSD.
+
+'''
+
+toc::[]
+
+[[intro]]
+== Introducción
+
+En los últimos años, el código abierto UNIX(TM) Los sistemas operativos basados en la tecnología comenzaron a implementarse ampliamente en servidores y máquinas cliente. Entre estos sistemas operativos me gustaría señalar dos: FreeBSD, por su herencia BSD, base de código probado en el tiempo y muchas características interesantes y Linux(TM) por su amplia base de usuarios, una entusiasta comunidad de desarrolladores abierta y el apoyo de grandes empresas. FreeBSD tiende a usarse en máquinas de clase servidor que sirven para tareas de red de trabajo pesado con menos uso en máquinas de clase de escritorio para usuarios normales. Mientras Linux(TM) tiene el mismo uso en los servidores, pero los usuarios domésticos lo utilizan mucho más. Esto conduce a una situación en la que hay muchos programas binarios disponibles para Linux(TM) que carecen de soporte para FreeBSD.
+
+Naturalmente, la necesidad de poder correr Linux(TM) binarios en un sistema FreeBSD y esto es de lo que trata esta tesis: la emulación delLinux(TM)kernel en el sistema operativo FreeBSD.
+
+Durante el verano de 2006, Google Inc. patrocinó un proyecto que se centró en ampliar laLinux(TM) capa de emulación (el llamado Linuxulator) en FreeBSD para incluir Linux(TM) 2.6 instalaciones. Esta tesis está escrita como parte de este proyecto.
+
+[[inside]]
+== Una mirada al interior ...
+
+En esta sección vamos a describir cada sistema operativo en cuestión. Cómo manejan las llamadas al sistema, los trapframes, etc., todas las cosas de bajo nivel. También describimos la forma en que entienden losUNIX(TM)primitivas como qué es un PID, qué es un hilo, etc. En la tercera subsección hablamos de cómoUNIX(TM) en UNIX(TM)la emulación se podría hacer en general.
+
+[[what-is-unix]]
+=== Que es UNIX(TM)
+
+UNIX(TM)es un sistema operativo con una larga historia que ha influido en casi todos los demás sistemas operativos actualmente en uso. A partir de la década de 1960, su desarrollo continúa hasta la actualidad (aunque en diferentes proyectos). UNIX(TM) El desarrollo pronto se bifurcó en dos formas principales: las familias BSD y System III/V. Se influenciaron mutuamente al cultivar un UNIX(TM) estándar. Entre las contribuciones originadas en BSD podemos nombrar memoria virtual, redes TCP/IP, FFS y muchas otras. La rama System V contribuyó a las primitivas de comunicación entre procesos de SysV, copia en escritura, etc.. UNIX(TM) en sí ya no existe, pero sus ideas han sido utilizadas por muchos otros sistemas operativos en todo el mundo, formando así el llamado UNIX(TM)-como los sistemas operativos. En estos días los más influyentes sonLinux(TM), Solaris y posiblemente (hasta cierto punto) FreeBSD. Hay en la empresa UNIX(TM) derivados (AIX, HP-UX, etc.), pero estos se han migrado cada vez más a los sistemas antes mencionados. Resumamos los típicosUNIX(TM) caracteristicas.
+
+[[tech-details]]
+=== Detalles técnicos
+
+Cada programa en ejecución constituye un proceso que representa un estado del cálculo. El proceso en ejecución se divide entre el espacio del núcleo y el espacio del usuario. Algunas operaciones solo se pueden realizar desde el espacio del kernel (que se ocupa de hardware, etc.), pero el proceso debería pasar la mayor parte de su vida en el espacio del usuario. El kernel es donde se lleva a cabo la gestión de los procesos, el hardware y los detalles de bajo nivel. El kernel proporciona un estándar unificadoUNIX(TM)API al espacio de usuario. Los más importantes se tratan a continuación.
+
+[[kern-proc-comm]]
+==== Comunicación entre el kernel y el proceso de espacio de usuario
+
+Common UNIX(TM) API defines a syscall as a way to issue commands from a user space process to the kernel. The most common implementation is either by using an interrupt or specialized instruction (think of `SYSENTER`/`SYSCALL` instructions for ia32). Syscalls are defined by a number. For example in FreeBSD, the syscall number{nbsp}85 is the man:swapon[2] syscall and the syscall number{nbsp}132 is man:mkfifo[2]. Some syscalls need parameters, which are passed from the user-space to the kernel-space in various ways (implementation dependant). Syscalls are synchronous.
+
+Otra forma posible de comunicarse es mediante un _trap_ Las trampas ocurren de forma asincrónica después de que ocurre algún evento (división por cero, falla de página, etc.). Una trampa puede ser transparente para un proceso (error de página) o puede resultar en una reacción como enviar una _signal_ (división por cero).
+
+[[proc-proc-comm]]
+==== Comunicación entre procesos
+
+Hay otras API (System V IPC, memoria compartida, etc.) pero la API más importante es la señal. Las señales son enviadas por procesos o por el kernel y recibidas por procesos. Algunas señales pueden ser ignoradas o manejadas por una rutina proporcionada por el usuario, otras dan como resultado una acción predefinida que no se puede alterar ni ignorar.
+
+[[proc-mgmt]]
+==== Gestión de proceso
+
+Las instancias de kernel se procesan primero en el sistema (llamado init). Cada proceso en ejecución puede crear su copia idéntica utilizando el man:fork[2] syscall. Se introdujeron algunas versiones ligeramente modificadas de esta llamada al sistema, pero la semántica básica es la misma. Cada proceso en ejecución puede transformarse en algún otro proceso utilizando el man:exec[3] syscall. Se introdujeron algunas modificaciones de esta llamada al sistema, pero todas tienen el mismo propósito básico. Los procesos terminan sus vidas llamando al man:exit[2] syscall. Cada proceso está identificado por un número único llamado PID. Cada proceso tiene un padre definido (identificado por su PID).
+
+[[thread-mgmt]]
+==== Gestión de subprocesos
+
+TradicionalUNIX(TM)no define ninguna API ni implementación para subprocesos, mientras quePOSIX(TM)define su API de subprocesos, pero la implementación no está definida. Tradicionalmente, había dos formas de implementar subprocesos. Manejarlos como procesos separados (subprocesos 1: 1) o envolver todo el grupo de subprocesos en un proceso y administrar el subproceso en el espacio de usuario (subprocesos 1: N). Comparación de las principales características de cada enfoque:
+
+Roscado 1: 1
+
+* - hilos de peso pesado
+* - la programación no puede ser alterada por el usuario (levemente mitigado por elPOSIX(TM)API)
+* +  no es necesario envolver syscall
+* +  puede utilizar varias CPU
+
+1: N roscado
+
+* +  hilos ligeros
+* +  el usuario puede modificar fácilmente la programación
+* - las llamadas al sistema deben estar envueltas
+* - no puede utilizar más de una CPU
+
+[[what-is-freebsd]]
+=== ¿Qué es FreeBSD?
+
+El proyecto FreeBSD es uno de los sistemas operativos de código abierto más antiguos disponibles actualmente para uso diario. Es un descendiente directo del genuinoUNIX(TM)por lo que podría afirmarse que es un verdaderoUNIX(TM)aunque los problemas de licencias no lo permiten. El inicio del proyecto se remonta a principios de la década de 1990 cuando un equipo de usuarios de BSD parchó el sistema operativo 386BSD. Basado en este patchkit, surgió un nuevo sistema operativo llamado FreeBSD por su licencia liberal. Otro grupo creó el sistema operativo NetBSD con diferentes objetivos en mente. Nos centraremos en FreeBSD.
+
+FreeBSD es un modernoUNIX(TM)sistema operativo basado en todas las características deUNIX(TM)Multitarea preventiva, instalaciones multiusuario, redes TCP / IP, protección de memoria, soporte de multiprocesamiento simétrico, memoria virtual con VM fusionada y caché de búfer, todo está ahí. Una de las características interesantes y extremadamente útiles es la capacidad de emular otrosUNIX(TM)como los sistemas operativos. A diciembre de 2006 y al desarrollo 7-CURRENT, se admiten las siguientes funcionalidades de emulación:
+
+* Emulación FreeBSD/i386 en FreeBSD/amd64
+* Emulación FreeBSD/i386 en FreeBSD/ia64
+* Linux(TM)emulación deLinux(TM)sistema operativo en FreeBSD
+* Emulación NDIS de la interfaz de controladores de red de Windows
+* Emulación NetBSD del sistema operativo NetBSD
+* Soporte PECoff para ejecutables PECoff FreeBSD
+* Emulación SVR4 de System V revisión 4UNIX(TM)
+
+Las emulaciones desarrolladas activamente son lasLinux(TM)layer y varias capas FreeBSD-on-FreeBSD. Se supone que otros no funcionan correctamente ni se pueden utilizar en estos días.
+
+[[freebsd-tech-details]]
+==== Detalles técnicos
+
+FreeBSD es el sabor tradicional deUNIX(TM)en el sentido de dividir la ejecución de procesos en dos mitades: espacio de kernel y ejecución de espacio de usuario. Hay dos tipos de entrada de proceso al kernel: una llamada al sistema y una trampa. Solo hay una forma de regresar. En las secciones siguientes describiremos las tres puertas hacia / desde el kernel. La descripción completa se aplica a la arquitectura i386 ya que el Linuxulator solo existe allí, pero el concepto es similar en otras arquitecturas. La información se tomó de [1] y el código fuente.
+
+[[freebsd-sys-entries]]
+===== Entradas del sistema
+
+FreeBSD tiene una abstracción llamada cargador de clases de ejecución, que es una cuña en elman:execve[2]syscall. Esto emplea una estructura `sysentvec` que describe una ABI ejecutable. Contiene cosas como tabla de traducción de errno, tabla de traducción de señales, varias funciones para satisfacer las necesidades de llamadas al sistema (reparación de pila, volcado de núcleos, etc.). Cada ABI que el kernel de FreeBSD desee admitir debe definir esta estructura, ya que se usa más adelante en el código de procesamiento de llamadas al sistema y en otros lugares. Las entradas del sistema son manejadas por controladores de trampas, donde podemos acceder tanto al espacio del núcleo como al espacio del usuario a la vez.
+
+[[freebsd-syscalls]]
+===== llamadas al sistema
+
+Las llamadas al sistema en FreeBSD se emiten ejecutando interrupt `0x80` con registro `%eax` establecido en un número de llamada al sistema deseado con argumentos pasados en la pila.
+
+Cuando un proceso emite una interrupción `0x80`, el `int0x80` Se emite el controlador de capturas syscall (definido en [.filename]#sys/i386/i386/exception.s#), que prepara argumentos (es decir, los copia en la pila) para una llamada a una función C man:syscall[2] (definido en [.filename]#sys/i386/i386/trap.c#), que procesa el pasado en trampilla. El procesamiento consiste en preparar el syscall (dependiendo del `sysvec` entrada), Al determinar si la llamada al sistema es de 32 bits o de 64 bits (cambia el tamaño de los parámetros), los parámetros se copian, incluida la llamada al sistema. A continuación, la función syscall real se ejecuta con el procesamiento del código de retorno (casos especiales para `ERESTART` y `EJUSTRETURN` errores). Finalmente un `userret()` está programado, cambiando el proceso de nuevo al ritmo de los usuarios. Los parámetros del controlador de llamada al sistema real se pasan en forma de `struct thread *td`, `struct syscall args *` argumentos donde el segundo parámetro es un puntero a la estructura de parámetros copiada.
+
+[[freebsd-traps]]
+===== trampas
+
+El manejo de trampas en FreeBSD es similar al manejo de llamadas al sistema. Siempre que ocurre una trampa, se llama a un manejador de ensamblador. Se elige entre todas las trampas, todas las trampas con regs presionadas o trampa de llamadas dependiendo del tipo de trampa. Este controlador prepara argumentos para una llamada a una función C `trap()` (definido en [.filename]#sys/i386/i386/trap.c#, que luego procesa la trampa ocurrida. Después del procesamiento, puede enviar una señal al proceso y / o salir al área de usuario usando `userret()`.
+
+[[freebsd-exits]]
+===== Salida
+
+Las salidas del kernel al espacio de usuario ocurren usando la rutina del ensamblador `doreti` independientemente de si se ingresó al kernel mediante una trampa o mediante una llamada al sistema. Esto restaura el estado del programa de la pila y vuelve al espacio de usuario.
+
+[[freebsd-unix-primitives]]
+===== UNIX(TM)primitivos
+
+El sistema operativo FreeBSD se adhiere al tradicional UNIX(TM) esquema, donde cada proceso tiene un número de identificación único, el llamado _PID_ (Identificacion de proceso). Los números PID se asignan de forma lineal o aleatoria desde `0` a `PID_MAX`. La asignación de números PID se realiza mediante una búsqueda lineal del espacio PID. Cada hilo en un proceso recibe el mismo número PID como resultado de la man:getpid[2] llamada.
+
+There are currently two ways to implement threading in FreeBSD. The first way is M:N threading followed by the 1:1 threading model. The default library used is M:N threading (`libpthread`) and you can switch at runtime to 1:1 threading (`libthr`). The plan is to switch to 1:1 library by default soon. Although those two libraries use the same kernel primitives, they are accessed through different API(es). The M:N library uses the `kse_*` family of syscalls while the 1:1 library uses the `thr_*` family of syscalls. Because of this, there is no general concept of thread ID shared between kernel and userspace. Of course, both threading libraries implement the pthread thread ID API. Every kernel thread (as described by `struct thread`) has td tid identifier but this is not directly accessible from userland and solely serves the kernel's needs. It is also used for 1:1 threading library as pthread's thread ID but handling of this is internal to the library and cannot be relied on.
+
+Como se indicó anteriormente, hay dos implementaciones de subprocesamiento en FreeBSD. La biblioteca M: N divide el trabajo entre el espacio del kernel y el espacio de usuario. Thread es una entidad que se programa en el kernel, pero puede representar varios subprocesos del espacio de usuario. Los subprocesos del espacio de usuario M se asignan a los subprocesos del núcleo N, lo que ahorra recursos y mantiene la capacidad de explotar el paralelismo de multiprocesador. Se puede obtener más información sobre la implementación en la página del manual o en [1]. La biblioteca 1: 1 mapea directamente un subproceso de usuario a un subproceso del kernel, lo que simplifica enormemente el esquema. Ninguno de estos diseños implementa un mecanismo de equidad (se implementó un mecanismo de este tipo, pero se eliminó recientemente porque causaba una grave desaceleración y hacía que el código fuera más difícil de manejar).
+
+[[what-is-linux]]
+=== Que es Linux(TM)
+
+Linux(TM) es una UNIX(TM)como el kernel desarrollado originalmente por Linus Torvalds, y al que ahora contribuyen una multitud masiva de programadores de todo el mundo. Desde sus meros inicios hasta hoy, con un amplio apoyo de empresas como IBM o Google, Linux(TM)se asocia con su rápido ritmo de desarrollo, soporte completo de hardware y modelo de organización de dictador benevolente.
+
+Linux(TM)El desarrollo comenzó en 1991 como un proyecto de aficionados en la Universidad de Helsinki en Finlandia. Desde entonces ha obtenido todas las características de un modernoUNIX(TM)como SO: multiprocesamiento, soporte multiusuario, memoria virtual, redes, básicamente todo está ahí. También hay funciones muy avanzadas como virtualización, etc.
+
+Desde 2006 Linux(TM)parece ser el sistema operativo de código abierto más utilizado con el apoyo de proveedores de software independientes como Oracle, RealNetworks, Adobe, etc. La mayor parte del software comercial distribuido paraLinux(TM)solo se puede obtener en forma binaria, por lo que la recopilación para otros sistemas operativos es imposible.
+
+La mayoría de los Linux(TM) el desarrollo ocurre en un Git sistema de control de versiones.Git es un sistema distribuido, por lo que no hay una fuente central de Linux(TM)código, pero algunas ramas se consideran prominentes y oficiales. El esquema de número de versión implementado por Linux(TM) consta de cuatro números A.B.C.D. Actualmente, el desarrollo ocurre en 2.6.C.D, donde C representa la versión principal, donde se agregan o cambian nuevas características, mientras que D es una versión secundaria solo para corrección de errores.
+
+Se puede obtener más información en [3].
+
+[[linux-tech-details]]
+==== Detalles técnicos
+
+Linux(TM)Sigue lo tradicionalUNIX(TM) esquema de dividir la ejecución de un proceso en dos mitades: el kernel y el espacio de usuario. El kernel se puede ingresar de dos maneras: a través de una trampa o mediante una llamada al sistema. La devolución se gestiona de una sola forma. La descripción adicional se aplica aLinux(TM) 2.6 sobre eli386(TM) arquitectura. Esta información se tomó de [2].
+
+[[linux-syscalls]]
+===== llamadas al sistema
+
+Syscalls en Linux(TM) se realizan (en el espacio de usuario) usando `syscallX` macros donde X sustituye a un número que representa el número de parámetros de la llamada al sistema dada. Esta macro se traduce en un código que se carga `%eax` registrarse con un número de syscall y ejecutar interrumpir `0x80`. Después de que se llame a este retorno de llamada al sistema, que traduce los valores de retorno negativos en positivos `errno` valores y conjuntos `res` a `-1` en caso de un error. Siempre que la interrupción `0x80` se llama el proceso ingresa al kernel en el controlador de trampas de llamadas del sistema. Esta rutina guarda todos los registros en la pila y llama a la entrada de llamada al sistema seleccionada. Tenga en cuenta que el Linux(TM) la convención de llamada espera que los parámetros a la llamada al sistema se pasen a través de registros como se muestra aquí:
+
+. parámetro -> `%ebx`
+. parámetro -> `%ecx`
+. parámetro -> `%edx`
+. parámetro -> `%esi`
+. parámetro -> `%edi`
+. parámetro -> `%ebp`
+
+Hay algunas excepciones a esto, donde Linux(TM) utiliza una convención de llamada diferente (más notablemente la `clone` syscall).
+
+[[linux-traps]]
+===== trampas
+
+Los manipuladores de trampas se introducen en [.filename]#arch/i386/kernel/traps.c# y la mayoría de estos manipuladores viven en [.filename]#arch/i386/kernel/entry.S#, donde ocurre el manejo de las trampas.
+
+[[linux-exits]]
+===== Salida
+
+El retorno del syscall es administrado por syscall man:exit[3], que verifica si el proceso tiene trabajo sin terminar, luego verifica si usamos selectores proporcionados por el usuario. Si esto sucede, se aplica la corrección de la pila y finalmente se restauran los registros de la pila y el proceso vuelve al espacio de usuario.
+
+[[linux-unix-primitives]]
+===== UNIX(TM)primitivos
+
+En la versión 2.6, el Linux(TM) sistema operativo redefinió algunos de los tradicionales UNIX(TM) primitivas, en particular PID, TID e hilo. PID se define para no ser único para cada proceso, por lo que para algunos procesos (subprocesos) man:getppid[2] devuelve el mismo valor. TID proporciona la identificación única del proceso. Esto es porque _NPTL_ (New POSIX(TM) Thread Library) define los subprocesos como procesos normales (llamados subprocesos 1: 1). Generando un nuevo proceso en Linux(TM) 2.6 sucede usando el `clone` syscall (las variantes de la bifurcación se vuelven a implementar usándolo). Esta llamada al sistema de clonación define un conjunto de indicadores que afectan el comportamiento del proceso de clonación con respecto a la implementación del hilo. La semántica es un poco difusa ya que no hay una sola bandera que le diga al syscall que cree un hilo.
+
+Las banderas de clonación implementadas son:
+
+* `CLONE_VM` - los procesos comparten su espacio de memoria
+* `CLONE_FS` - compartir umask, cwd y espacio de nombres
+* `CLONE_FILES` - compartir archivos abiertos
+* `CLONE_SIGHAND` - compartir manejadores de señales y señales bloqueadas
+* `CLONE_PARENT` - Compartir padre
+* `CLONE_THREAD` - ser hilo (más explicación a continuación)
+* `CLONE_NEWNS` - nuevo espacio de nombres
+* `CLONE_SYSVSEM` - compartir estructuras de deshacer SysV
+* `CLONE_SETTLS` - configurar TLS en la dirección proporcionada
+* `CLONE_PARENT_SETTID` - Establecer TID en el padre
+* `CLONE_CHILD_CLEARTID` - TID claro en el niño
+* `CLONE_CHILD_SETTID` - Establecer TID en el niño
+
+`CLONE_PARENT` establece el padre real en el padre de la persona que llama. Esto es útil para subprocesos porque si el subproceso A crea el subproceso B, queremos que el subproceso B sea parental al padre de todo el grupo de subprocesos. `CLONE_THREAD` hace exactamente lo mismo que `CLONE_PARENT`, `CLONE_VM` y `CLONE_SIGHAND`, reescribe el PID para que sea el mismo que el PID de la persona que llama, configura la señal de salida como ninguna y entra en el grupo de hilos. `CLONE_SETTLS` configura entradas GDT para el manejo de TLS. los `CLONE_*_*TID` conjunto de banderas establece/borra la dirección proporcionada por el usuario a TID o 0.
+
+Como puede ver el `CLONE_THREAD` hace la mayor parte del trabajo y no parece encajar muy bien en el esquema. La intención original no está clara (incluso para los autores, según los comentarios en el código), pero creo que originalmente había una bandera de subprocesamiento, que luego se dividió entre muchas otras banderas, pero esta separación nunca se terminó por completo. Tampoco está claro para qué sirve esta partición, ya que glibc no la usa, por lo que solo el uso escrito a mano del clon permite al programador acceder a estas funciones.
+
+Para los programas sin subprocesos, el PID y el TID son los mismos. Para los programas con subprocesos, el PID y el TID del primer subproceso son iguales y cada subproceso creado comparte el mismo PID y se le asigna un TID único (porque `CLONE_THREAD` se pasa) también el padre se comparte para todos los procesos que forman este programa enhebrado.
+
+El código que implementa man:pthread_create[3] en NPTL define las banderas de clonación como esta:
+
+[.programlisting]
+....
+int clone_flags = (CLONE_VM | CLONE_FS | CLONE_FILES | CLONE_SIGNAL
+
+ | CLONE_SETTLS | CLONE_PARENT_SETTID
+
+| CLONE_CHILD_CLEARTID | CLONE_SYSVSEM
+#if __ASSUME_NO_CLONE_DETACHED == 0
+
+| CLONE_DETACHED
+#endif
+
+| 0);
+....
+
+El `CLONE_SIGNAL` se define como
+
+[.programlisting]
+....
+#define CLONE_SIGNAL (CLONE_SIGHAND | CLONE_THREAD)
+....
+
+el último 0 significa que no se envía ninguna señal cuando alguno de los hilos sale.
+
+[[what-is-emu]]
+=== Que es la emulacion
+
+Según una definición de diccionario, la emulación es la capacidad de un programa o dispositivo para imitar otro programa o dispositivo. Esto se logra proporcionando la misma reacción a un estímulo dado que el objeto emulado. En la práctica, el mundo del software ve principalmente tres tipos de emulación: un programa utilizado para emular una máquina (QEMU, varios emuladores de consola de juegos, etc.), emulación de software de una instalación de hardware (emuladores OpenGL, emulación de unidades de punto flotante, etc.) y operación emulación del sistema (ya sea en el núcleo del sistema operativo o como un programa de espacio de usuario).
+
+La emulación se usa generalmente en un lugar donde usar el componente original no es factible ni posible en absoluto. Por ejemplo, alguien podría querer usar un programa desarrollado para un sistema operativo diferente al que usa. Entonces la emulación es útil. A veces no hay otra forma que usar la emulación, por ejemplo, cuando el dispositivo de hardware que intenta utilizar no existe (todavía / más), no hay otra forma que la emulación. Esto sucede a menudo cuando se traslada un sistema operativo a una plataforma nueva (inexistente). A veces es más barato emular.
+
+Desde el punto de vista de la implementación, hay dos enfoques principales para la implementación de la emulación. Puede emular todo, aceptando posibles entradas del objeto original, manteniendo el estado interno y emitiendo la salida correcta según el estado y / o la entrada. Este tipo de emulación no requiere condiciones especiales y básicamente se puede implementar en cualquier lugar para cualquier dispositivo / programa. El inconveniente es que implementar tal emulación es bastante difícil, requiere mucho tiempo y es propenso a errores. En algunos casos, podemos utilizar un enfoque más simple. Imagine que desea emular una impresora que imprime de izquierda a derecha en una impresora que imprime de derecha a izquierda. Es obvio que no hay necesidad de una capa de emulación compleja, pero basta con invertir el texto impreso. A veces, el entorno de emulación es muy similar al emulado, por lo que solo se necesita una capa fina de traducción para proporcionar una emulación completamente funcional. Como puede ver, esto es mucho menos exigente de implementar, por lo que consume menos tiempo y es propenso a errores que el enfoque anterior. Pero la condición necesaria es que los dos entornos sean lo suficientemente similares. El tercer enfoque combina los dos anteriores. La mayoría de las veces los objetos no brindan las mismas capacidades, por lo que en el caso de emular el más poderoso en el menos poderoso, tenemos que emular las características faltantes con la emulación completa descrita anteriormente.
+
+Esta tesis de maestría trata sobre la emulación de UNIX(TM) en UNIX(TM), que es exactamente el caso, donde solo una fina capa de traducción es suficiente para proporcionar una emulación completa. los UNIX(TM) La API consta de un conjunto de llamadas al sistema, que normalmente son independientes y no afectan al estado global del kernel.
+
+Hay algunas llamadas al sistema que afectan el estado interno, pero esto se puede solucionar proporcionando algunas estructuras que mantienen el estado adicional.
+
+Ninguna emulación es perfecta y las emulaciones tienden a carecer de algunas partes, pero esto no suele causar inconvenientes graves. Imagina un emulador de consola de juegos que emula todo menos la salida de música. No hay duda de que los juegos son jugables y se puede usar el emulador. Puede que no sea tan cómodo como la consola de juegos original, pero es un compromiso aceptable entre precio y comodidad.
+
+Lo mismo ocurre con el UNIX(TM) API. La mayoría de los programas pueden vivir con un conjunto muy limitado de llamadas al sistema funcionando. Esas llamadas al sistema tienden a ser las más antiguas (man:leer[2]/man:write[2], man:fork[2] family, man:señal[3] handling, man:salida[3], man:socket[2] API), por lo que es fácil de emular porque su semántica se comparte entre todos UNIX(TM)es, que existen hoy.
+
+[[freebsd-emulation]]
+== Emulación
+
+=== Cómo funciona la emulación en FreeBSD
+
+Como se dijo anteriormente, FreeBSD admite la ejecución de binarios de varios otros UNIX(TM)es. esto funciona porque FreeBSD tiene una abstracción llamada cargador de clases de ejecución. Esto encaja en elman:execve[2]syscall, así que cuando man:execve[2] está a punto de ejecutar un binario examina su tipo.
+
+Básicamente, existen dos tipos de binarios en FreeBSD. Scripts de texto tipo shell que se identifican por `#!` como sus dos primeros personajes y normal (typically _ELF_) binarios, que son una representación de un objeto ejecutable compilado. La gran mayoría (se podría decir que todos) de los binarios en FreeBSD son del tipo ELF. Los archivos ELF contienen un encabezado, que especifica la ABI del sistema operativo para este archivo ELF. Al leer esta información, el sistema operativo puede determinar con precisión qué tipo de binario es el archivo dado.
+
+Cada OS ABI debe estar registrado en el kernel de FreeBSD. Esto también se aplica a la ABI del sistema operativo nativo de FreeBSD. Así que cuando man:execve[2] ejecuta un binario, itera a través de la lista de API registradas y cuando encuentra la correcta, comienza a usar la información contenida en la descripción de la ABI del sistema operativo (su tabla syscall,`errno` tabla de traducción, etc.). Entonces, cada vez que el proceso llama a una llamada al sistema, utiliza su propio conjunto de llamadas al sistema en lugar de una global. Esto proporciona efectivamente una forma muy elegante y fácil de soportar la ejecución de varios formatos binarios.
+
+La naturaleza de la emulación de diferentes sistemas operativos (y también algunos otros subsistemas) llevó a los desarrolladores a invitar a un mecanismo de eventos de controlador. Hay varios lugares en el kernel, donde se llama a una lista de controladores de eventos. Cada subsistema puede registrar un controlador de eventos y se los llama en consecuencia. Por ejemplo, cuando un proceso sale, se llama a un controlador que posiblemente limpia lo que sea que el subsistema necesite limpiarse.
+
+Esas sencillas instalaciones proporcionan básicamente todo lo que se necesita para la infraestructura de emulación y, de hecho, son básicamente las únicas cosas necesarias para implementar el Linux(TM) capa de emulación.
+
+[[freebsd-common-primitives]]
+=== Primitivas comunes en el kernel de FreeBSD
+
+Las capas de emulación necesitan soporte del sistema operativo. Voy a describir algunas de las primitivas soportadas en el sistema operativo FreeBSD.
+
+[[freebsd-locking-primitives]]
+==== Bloqueo de primitivos
+
+Contribuido por: Attilio Rao mailto:attilio@FreeBSD.org[attilio@FreeBSD.org]
+
+El conjunto de primitivas de sincronización de FreeBSD se basa en la idea de suministrar un número bastante grande de primitivas diferentes de manera que se pueda utilizar la mejor para cada situación particular y apropiada.
+
+Desde un punto de vista de alto nivel, puede considerar tres tipos de primitivas de sincronización en el kernel de FreeBSD:
+
+* operaciones atómicas y barreras de memoria
+* Cerraduras
+* barreras de programación
+
+A continuación hay descripciones de las 3 familias. Para cada bloqueo, debería consultar la página de manual vinculada (cuando sea posible) para obtener explicaciones más detalladas.
+
+[[freebsd-atomic-op]]
+===== Operaciones atómicas y barreras de memoria
+
+Las operaciones atómicas se implementan a través de un conjunto de funciones que realizan aritmética simple sobre operandos de memoria de forma atómica con respecto a eventos externos (interrupciones, apropiación, etc.). Las operaciones atómicas pueden garantizar la atomicidad solo en tipos de datos pequeños (en el orden de magnitud del `.long.` tipo de datos de arquitectura C), por lo que rara vez se debe usar directamente en el código de nivel final, si no solo para operaciones muy simples (como la configuración de banderas en un mapa de bits, por ejemplo). De hecho, es bastante simple y común escribir una semántica incorrecta basada solo en operaciones atómicas (generalmente referidas como sin bloqueo). El kernel de FreeBSD ofrece una forma de realizar operaciones atómicas junto con una barrera de memoria. Las barreras de memoria garantizarán que ocurra una operación atómica siguiendo un orden específico con respecto a otros accesos a la memoria. Por ejemplo, si necesitamos que ocurra una operación atómica justo después de que se completen todas las demás escrituras pendientes (en términos de instrucciones que reordenan las actividades de búfer), necesitamos usar explícitamente una barrera de memoria junto con esta operación atómica. Por lo tanto, es sencillo entender por qué las barreras de memoria juegan un papel clave para la construcción de bloqueos de nivel superior (como refcounts, mutexes, etc.). Para obtener una explicación detallada sobre las operaciones atómicas, consulte man:atomic[9]. Sin embargo, está lejos de señalar que las operaciones atómicas (y las barreras de memoria también) deberían idealmente usarse solo para construir bloqueos frontales (como mutex).
+
+[[freebsd-refcounts]]
+===== Recuentos
+
+Los refcounts son interfaces para manejar contadores de referencia. Se implementan a través de operaciones atómicas y están destinadas a usarse solo en casos, donde el contador de referencia es lo único que debe protegerse, por lo que incluso algo como un spin-mutex está en desuso. El uso de la interfaz refcount para estructuras, donde ya se usa un mutex, a menudo es incorrecto, ya que probablemente deberíamos cerrar el contador de referencia en algunas rutas ya protegidas. Actualmente no existe una página de manual que discuta refcount, solo verifique [.filename]#sys/refcount.h# para obtener una descripción general de la API existente.
+
+[[freebsd-locks]]
+===== Cerraduras
+
+El kernel de FreeBSD tiene enormes clases de bloqueos. Cada bloqueo está definido por algunas propiedades peculiares, pero probablemente la más importante es el evento vinculado a los titulares de la competencia (o en otros términos, el comportamiento de los hilos que no pueden adquirir el bloqueo). El esquema de bloqueo de FreeBSD presenta tres comportamientos diferentes para los contendientes:
+
+. hilado
+. bloqueo
+. dormir
+
+[NOTE]
+====
+los números no son casuales
+====
+
+[[freebsd-spinlocks]]
+===== Cerraduras giratorias
+
+Las cerraduras giratorias permiten a los camareros girar hasta que no pueden adquirir la cerradura. Un asunto importante con el que se trata es cuando un hilo compite en un bloqueo de giro si no está programado. Dado que el kernel de FreeBSD es preventivo, esto expone el bloqueo de giro al riesgo de interbloqueos que pueden resolverse simplemente deshabilitando las interrupciones mientras se adquieren. Por esta y otras razones (como la falta de soporte de propagación de prioridad, deficiencias en los esquemas de equilibrio de carga entre las CPU, etc.), los bloqueos de giro están destinados a proteger rutas de código muy pequeñas o, idealmente, no deben usarse en absoluto si no se solicitan explícitamente ( explicado más adelante).
+
+[[freebsd-blocking]]
+===== Bloqueo
+
+Las cerraduras de bloque permiten que los camareros sean desprogramados y bloqueados hasta que el propietario de la cerradura no la deje caer y despierte a uno o más contendientes. Para evitar problemas de inanición, las cerraduras de bloqueo se propagan prioritariamente de los camareros al propietario. Los bloqueos de bloqueo deben implementarse a través de la interfaz del torniquete y están destinados a ser el tipo de bloqueo más utilizado en el núcleo, si no se cumplen condiciones particulares.
+
+[[freebsd-sleeping]]
+===== Dormir
+
+Las cerraduras para dormir permiten que los camareros se desagreguen y se duerman hasta que el soporte de la cerradura no se caiga y despierte a uno o más camareros. Dado que los bloqueos de suspensión están destinados a proteger grandes rutas de código y atender eventos asincrónicos, no realizan ningún tipo de propagación de prioridad. Deben implementarse a través del man:sleepqueue[9] interfaz.
+
+El orden utilizado para adquirir cerraduras es muy importante, no solo por la posibilidad de interbloqueo debido a las inversiones de orden de cerradura, sino incluso porque la adquisición de cerraduras debe seguir reglas específicas vinculadas a la naturaleza de las cerraduras. Si echa un vistazo a la tabla de arriba, la regla práctica es que si un hilo tiene un candado de nivel n (donde el nivel es el número listado cerca del tipo de candado) no está permitido adquirir un candado de niveles superiores , ya que esto rompería la semántica especificada para una ruta. Por ejemplo, si un hilo tiene un bloqueo de bloqueo (nivel 2), se le permite adquirir un bloqueo de giro (nivel 1) pero no un bloqueo de suspensión (nivel 3), ya que los bloqueos de bloqueo están destinados a proteger rutas más pequeñas que el bloqueo de suspensión ( Sin embargo, estas reglas no se refieren a operaciones atómicas o barreras de programación).
+
+Esta es una lista de bloqueo con sus respectivos comportamientos:
+
+* spin mutex - spinning - man:mutex[9]
+* sleep mutex - blocking - man:mutex[9]
+* pool mutex - blocking - man:mtx_pool[9]
+* dormir familia - dormir - man:sleep[9] pause tsleep msleep msleep spin msleep rw msleep sx
+* condvar - sleeping - man:condvar[9]
+* rwlock - bloqueo - man:rwlock[9]
+* sxlock - sleeping - man:sx[9]
+* lockmgr - sleeping - man:lockmgr[9]
+* semaphores - sleeping - man:sema[9]
+
+Entre estos bloqueos, solo los mutex, sxlocks, rwlocks y lockmgrs están destinados a manejar la recursividad, pero actualmente la recursividad solo es compatible con mutexes y lockmgrs.
+
+[[freebsd-scheduling]]
+===== Barreras de programación
+
+Las barreras de programación están destinadas a utilizarse para impulsar la programación del enhebrado. Consisten principalmente en tres stubs diferentes:
+
+* secciones críticas (y preferencia)
+* sched_bind
+* sched_pin
+
+Generalmente, estos deben usarse solo en un contexto particular e incluso si a menudo pueden reemplazar bloqueos, deben evitarse porque no permiten el diagnóstico de problemas eventuales simples con herramientas de depuración de bloqueo (como man:testigo[4]).
+
+[[freebsd-critical]]
+===== Secciones críticas
+
+El kernel de FreeBSD se ha hecho preventivo básicamente para tratar con hilos de interrupción. De hecho, para evitar una latencia de interrupción alta, los subprocesos de prioridad de tiempo compartido pueden ser reemplazados por subprocesos de interrupción (de esta manera, no necesitan esperar para ser programados como vistas previas de la ruta normal). La preferencia, sin embargo, introduce nuevos puntos de carrera que también deben manejarse. A menudo, para hacer frente a la preferencia, lo más sencillo es desactivarla por completo. Una sección crítica define un fragmento de código (delimitado por el par de funciones man:critical_enter[9] y man:critical_exit[9], donde se garantiza que la preferencia no ocurrirá (hasta que el código protegido se ejecute por completo). Esto a menudo puede reemplazar un candado de manera efectiva, pero debe usarse con cuidado para no perder toda la ventaja que brinda la preferencia.
+
+[[freebsd-schedpin]]
+===== sched_pin/sched_unpin
+
+Otra forma de lidiar con la preferencia es `sched_pin()` interfaz. Si un fragmento de código está cerrado en el `sched_pin()` y `sched_unpin()` par de funciones, se garantiza que el subproceso respectivo, incluso si puede ser reemplazado, siempre se ejecutará en la misma CPU. La fijación es muy eficaz en el caso particular cuando tenemos que acceder a datos por CPU y asumimos que otros hilos no cambiarán esos datos. La última condición determinará una sección crítica como una condición demasiado fuerte para nuestro código.
+
+[[freebsd-schedbind]]
+===== sched_bind/sched_unbind
+
+`sched_bind` es una API que se utiliza para vincular un hilo a una CPU en particular durante todo el tiempo que ejecuta el código, hasta que `sched_unbind` la llamada a la función no la desvincula. Esta función tiene un papel clave en situaciones en las que no puede confiar en el estado actual de las CPU (por ejemplo, en las primeras etapas del arranque), ya que desea evitar que su hilo migre en CPU inactivas. Ya que `sched_bind` y `sched_unbind` manipular las estructuras internas del programador, es necesario incluirlas en `sched_lock` adquisición/liberación cuando se usa.
+
+[[freebsd-proc]]
+==== Estructura de proceso
+
+Varias capas de emulación a veces requieren algunos datos adicionales por proceso. Puede administrar estructuras separadas (una lista, un árbol, etc.) que contienen estos datos para cada proceso, pero esto tiende a ser lento y consume memoria. Para solucionar este problema el FreeBSD `proc` estructura contiene `p_emuldata`,que es un puntero vacío a algunos datos específicos de la capa de emulación. Esta `proc` La entrada está protegida por proc mutex.
+
+El FreeBSD `proc` structure contains a `p_sysent` entrada que identifica qué ABI está ejecutando este proceso. De hecho, es un puntero al `sysentvec` descrito arriba. Entonces, al comparar este puntero con la dirección donde el `sysentvec` Si se almacena la estructura para la ABI dada, podemos determinar efectivamente si el proceso pertenece a nuestra capa de emulación. El código normalmente se ve así:
+
+[.programlisting]
+....
+if (__predict_true(p->p_sysent != &elf_Linux_sysvec))
+	  return;
+....
+
+Como puede ver, utilizamos eficazmente la `__predict_true` modificador para colapsar el caso más común (proceso FreeBSD) a una operación de retorno simple preservando así el alto rendimiento. Este código debería convertirse en una macro porque actualmente no es muy flexible, es decir, no admitimos Linux(TM)64 emulación ni A.OUTLinux(TM) procesos en i386.
+
+[[freebsd-vfs]]
+==== VFS
+
+el subsistema FreeBSD VFS es muy complejo pero es Linux(TM) La capa de emulación utiliza solo un pequeño subconjunto a través de una API bien definida. Puede operar en vnodes o controladores de archivos. Vnode representa un vnode virtual, es decir, la representación de un nodo en VFS. Otra representación es un controlador de archivos, que representa un archivo abierto desde la perspectiva de un proceso. Un manejador de archivos puede representar un socket o un archivo ordinario. Un controlador de archivos contiene un puntero a su vnode. Más de un controlador de archivos puede apuntar al mismo vnode.
+
+[[freebsd-namei]]
+===== namei
+
+La man:namei[9] La rutina es un punto de entrada central para la búsqueda y traducción de nombres de rutas. Atraviesa la ruta punto por punto desde el punto de inicio hasta el punto final utilizando la función de búsqueda, que es interna de VFS. los man:namei[9] syscall puede hacer frente a enlaces simbólicos, rutas absolutas y relativas. Cuando se busca un camino usando man:namei[9] se ingresa en la caché de nombres. Este comportamiento se puede suprimir. Esta rutina se utiliza en todo el kernel y su rendimiento es muy crítico.
+
+[[freebsd-vn]]
+===== vn_fullpath
+
+La man:vn_fullpath[9] La función hace el mejor esfuerzo para atravesar la caché de nombres de VFS y devuelve una ruta para un vnode dado (bloqueado). Este proceso no es confiable pero funciona bien para los casos más comunes. La falta de confiabilidad se debe a que se basa en la caché VFS (no atraviesa las estructuras medias), no funciona con enlaces duros, etc. Esta rutina se usa en varios lugares del Linuxulator.
+
+[[freebsd-vnode]]
+===== Operaciones de vnode
+
+* `fgetvp` - dado un hilo y un número de descriptor de archivo, devuelve el vnode asociado
+* man:vn_lock[9] - bloquea un vnode
+* `vn_unlock` - desbloquea un vnode
+* man:VOP_READDIR[9] - lee un directorio al que hace referencia un vnode
+* man:VOP_GETATTR[9] - obtiene atributos de un archivo o directorio al que hace referencia un vnode
+* man:VOP_LOOKUP[9] - busca una ruta a un directorio determinado
+* man:VOP_OPEN[9] - abre un archivo referenciado por un vnode
+* man:VOP_CLOSE[9] - cierra un archivo al que hace referencia un vnode
+* man:vput[9] - disminuye el recuento de uso de un vnode y lo desbloquea
+* man:vrele[9] - disminuye el recuento de uso de un vnode
+* man:vref[9] - incrementa el recuento de uso de un vnode
+
+[[freebsd-file-handler]]
+===== Operaciones del controlador de archivos
+
+* `fget` - dado un hilo y un número de descriptor de archivo, devuelve el controlador de archivo asociado y lo hace referencia
+* `fdrop` - suelta una referencia a un controlador de archivos
+* `fhold` - hace referencia a un controlador de archivos
+
+[[md]]
+== Linux(TM) capa de emulación-parte MD
+
+Esta sección trata de la implementación de Linux(TM) capa de emulación en el sistema operativo FreeBSD. Primero describe la parte dependiente de la máquina hablando de cómo y dónde se implementa la interacción entre el área de usuario y el kernel. Habla de llamadas al sistema, señales, ptrace, trampas, reparación de pila. Esta parte trata sobre i386, pero está escrito en general, por lo que otras arquitecturas no deberían diferir mucho. La siguiente parte es la parte independiente de la máquina del Linuxulator. Esta sección solo cubre el manejo de i386 y ELF. A.OUT es obsoleto y no se ha probado.
+
+[[syscall-handling]]
+=== Manejo de llamadas al sistema
+
+El manejo de syscall está escrito principalmente en [.filename]#linux_sysvec.c#, que cubre la mayoría de las rutinas señaladas en la `sysentvec` estructura. Cuando una Linux(TM) proceso que se ejecuta en FreeBSD emite una llamada al sistema, la rutina general de llamada al sistema llama a la rutina prepsyscall de linux para Linux(TM) ABI.
+
+[[linux-prepsyscall]]
+==== Linux(TM) prepsyscall
+
+Linux(TM)pasa argumentos a las llamadas al sistema a través de registros (es por eso que está limitado a 6 parámetros en i386) mientras que FreeBSD usa la pila. los Linux(TM) La rutina prepsyscall debe copiar los parámetros de los registros a la pila. El orden de los registros es: `%ebx`, `%ecx`, `%edx`, `%esi`, `%edi`, `%ebp`. El problema es que esto es cierto solo para _most_ de las llamadas al sistema. Algunos (más notablemente `clone`) usa un orden diferente pero afortunadamente es fácil de arreglar insertando un parámetro ficticio en el `linux_clone` prototipo.
+
+[[syscall-writing]]
+==== Escritura de syscall
+
+Cada syscall implementada en Linuxulator debe tener su prototipo con varios indicadores en [.filename]#syscalls.master#. La forma del archivo es:
+
+[.programlisting]
+....
+...
+	AUE_FORK STD		{ int linux_fork(void); }
+...
+	AUE_CLOSE NOPROTO	{ int close(int fd); }
+...
+....
+
+La primera columna representa el número de llamada al sistema. La segunda columna es para el soporte de auditoría. La tercera columna representa el tipo de llamada al sistema. Es bien `STD`, `OBSOL`, `NOPROTO` y `UNIMPL`. `STD` es una llamada al sistema estándar con prototipo completo e implementación. `OBSOL` es Obsoleto y define solo el prototipo.. `NOPROTO` significa que la llamada al sistema se implementa en otro lugar, así que no anteponga el prefijo ABI, etc. `UNIMPL` Significa que el syscall será sustituido por el `nosys` syscall (una syscall que simplemente imprime un mensaje sobre la no implementación del syscall y que regresa `ENOSYS`).
+
+Desde [.filename]#syscalls.master# un script genera tres archivos: [.filename]#linux_syscall.h#, [.filename]#linux_proto.h# y [.filename]#linux_sysent.c#. El [.filename]#linux_syscall.h# contiene definiciones de nombres de llamadas al sistema y su valor numérico, por ejemplo:
+
+[.programlisting]
+....
+...
+#define LINUX_SYS_linux_fork 2
+...
+#define LINUX_SYS_close 6
+...
+....
+
+El [.filename]#linux_proto.h# contiene definiciones de estructura de argumentos para cada llamada al sistema, por ejemplo:
+
+[.programlisting]
+....
+struct linux_fork_args {
+  register_t dummy;
+};
+....
+
+Y finalmente, [.filename]#linux_sysent.c# contiene una estructura que describe la tabla de entrada del sistema, utilizada para enviar una llamada al sistema, por ejemplo:
+
+[.programlisting]
+....
+{ 0, (sy_call_t *)linux_fork, AUE_FORK, NULL, 0, 0 }, /* 2 = linux_fork */
+{ AS(close_args), (sy_call_t *)close, AUE_CLOSE, NULL, 0, 0 }, /* 6 = close */
+....
+
+Como puedes ver `linux_fork` se implementa en el propio Linuxulator, por lo que la definición es de `STD` type y no tiene argumento, que es exhibido por la estructura de argumento ficticia. Por otra parte `close` es solo un alias de FreeBSD real man:cierre[2] por lo que no tiene una estructura de argumentos linux asociada y en la tabla de entrada del sistema no tiene el prefijo linux, ya que llama al real man:cierre[2] en el kernel.
+
+[[dummy-syscalls]]
+==== Llamadas al sistema ficticias
+
+El Linux(TM) La capa de emulación no está completa, ya que algunas llamadas al sistema no se implementan correctamente y otras no se implementan en absoluto. La capa de emulación emplea una función para marcar llamadas al sistema no implementadas con el `DUMMY` macro. Estas definiciones ficticias residen en [.filename]#linux_dummy.c# en forma de `DUMMY(syscall);`, que luego se traduce a varios archivos auxiliares de syscall y la implementación consiste en imprimir un mensaje diciendo que este syscall no está implementado. los `UNIMPL` prototype no se utiliza porque queremos poder identificar el nombre de la llamada al sistema que se llamó para saber qué llamadas al sistema son más importantes de implementar.
+
+[[signal-handling]]
+=== Manejo de señales
+
+El manejo de señales se realiza generalmente en el kernel de FreeBSD para todas las compatibilidades binarias con una llamada a una capa dependiente de la compatibilidad. Linux(TM) la capa de compatibilidad define `linux_sendsig` rutina para este propósito.
+
+[[linux-sendsig]]
+==== Linux(TM) sendsig
+
+Esta rutina comprueba primero si la señal se ha instalado con un `SA_SIGINFO` en cuyo caso llama `linux_rt_sendsig` rutina en su lugar. Además, asigna (o reutiliza un contexto de manejador de señal ya existente), luego crea una lista de argumentos para el manejador de señal. Traduce el número de señal basado en la tabla de traducción de señales, asigna un manejador, traduce sigset. Luego guarda contexto para el `sigreturn` rutina (varios registros, número de trampa traducido y máscara de señal). Finalmente, copia el contexto de la señal al espacio de usuario y prepara el contexto para que se ejecute el manejador de señal real.
+
+[[linux-rt-sendsig]]
+==== linux_rt_sendsig
+
+Esta rutina es similar a `linux_sendsig` solo la preparación del contexto de la señal es diferente. Agregando `siginfo`, `ucontext`, y algo POSIX(TM) partes. Podría valer la pena considerar si esas dos funciones no se pueden combinar con el beneficio de una menor duplicación de código y posiblemente una ejecución aún más rápida.
+
+[[linux-sigreturn]]
+==== linux_sigreturn
+
+Esta llamada al sistema se utiliza para la devolución del controlador de señales. Realiza algunas comprobaciones de seguridad y restaura el contexto del proceso original. También desenmascara la señal en la máscara de señal de proceso.
+
+[[ptrace]]
+=== Ptrace
+
+Muchos UNIX(TM) derivados implementan el man:ptrace[2] syscall para permitir varias funciones de seguimiento y depuración. Esta función permite que el proceso de rastreo obtenga diversa información sobre el proceso rastreado, como volcados de registros, cualquier memoria del espacio de direcciones del proceso, etc. y también rastrear el proceso como en el paso de una instrucción o entre entradas del sistema (syscalls y trampas). man:ptrace[2]también le permite configurar diversa información en el proceso de seguimiento (registros, etc.). man:ptrace[2] es a UNIX(TM)-amplio estándar implementado en la mayoría UNIX(TM)es alrededor del mundo.
+
+Linux(TM) emulación en FreeBSD implementa la man:ptrace[2] instalación en [.filename]#linux_ptrace.c#. Las rutinas para convertir registros entre Linux(TM) Y FreeBSD y el actual man:ptrace[2] syscall emulación syscall. El syscall es un bloque de conmutadores largo que implementa su contraparte en FreeBSD para cadaman:ptrace[2] mando. los man:ptrace[2] los comandos son en su mayoría iguales entre Linux(TM) y FreeBSD, por lo que normalmente solo se necesita una pequeña modificación. Por ejemplo, `PT_GETREGS` en Linux(TM) opera con datos directos, mientras que FreeBSD usa un puntero a los datos, por lo que después de realizar un (nativo) man:ptrace[2] syscall, se debe realizar una copia para conservar Linux(TM) semántica.
+
+La man:ptrace[2] La implementación en Linuxulator tiene algunas debilidades conocidas. Ha habido pánico al usar `strace` (el cual es un man:ptrace[2] consumidor) en el entorno Linuxulator. también `PT_SYSCALL` no está implementado.
+
+[[traps]]
+=== trampas
+
+Siempre que un Linux(TM) proceso que se ejecuta en la capa de emulación trampas la trampa en sí se maneja de forma transparente con la única excepción de la traducción de trampas. Linux(TM) y FreeBSD difiere de opinión sobre lo que es una trampa, así que esto se trata aquí. El código es realmente muy corto:
+
+[.programlisting]
+....
+static int
+translate_traps(int signal, int trap_code)
+{
+
+  if (signal != SIGBUS)
+    return signal;
+
+  switch (trap_code) {
+
+    case T_PROTFLT:
+    case T_TSSFLT:
+    case T_DOUBLEFLT:
+    case T_PAGEFLT:
+      return SIGSEGV;
+
+    default:
+      return signal;
+  }
+}
+....
+
+
+[[stack-fixup]]
+=== Reparación de pila
+
+El editor de enlaces en tiempo de ejecución de RTLD espera las llamadas etiquetas AUX en la pila durante una `execve` por lo que se debe realizar una reparación para garantizar esto. Por supuesto, cada sistema RTLD es diferente, por lo que la capa de emulación debe proporcionar su propia rutina de reparación de la pila para hacer esto. Linuxulator también. los `elf_linux_fixup` simplemente copia las etiquetas AUX a la pila y ajusta la pila del proceso de espacio de usuario para que apunte justo después de esas etiquetas. Entonces RTLD funciona de manera inteligente.
+
+[[aout-support]]
+=== soporte A.OUT
+
+La Linux(TM) La capa de emulación en i386 también admite Linux(TM)A.OUT binarios. Prácticamente todo lo descrito en las secciones anteriores debe implementarse para la compatibilidad con A.OUT (además de la traducción de trampas y el envío de señales). El soporte para los binarios A.OUT ya no se mantiene, especialmente la emulación 2.6 no funciona con él, pero esto no causa ningún problema, ya que la base de linux en los puertos probablemente no soporte los binarios A.OUT en absoluto. Este soporte probablemente se eliminará en el futuro. La mayoría de las cosas necesarias para cargarLinux(TM) A.OUT binarios está en [.filename]#imgact_linux.c# archivo.
+
+[[mi]]
+== Linux(TM) capa de emulación - parte MI
+
+Esta sección habla de la parte independiente de la máquina del Linuxulator. Cubre la infraestructura de emulación necesaria para Linux(TM) 2.6 emulación, la implementación del almacenamiento local de subprocesos (TLS) (en i386) y futexes. Luego hablamos brevemente sobre algunas llamadas al sistema.
+
+[[nptl-desc]]
+=== Descripción de NPTEL
+
+Una de las principales áreas de progreso en el desarrollo de Linux(TM) 2.6 estaba enhebrando. Antes de 2.6, el Linux(TM) El soporte de subprocesos se implementó en el linuxthreads biblioteca. La biblioteca fue una implementación parcial de POSIX(TM) enhebrado. El subproceso se implementó usando procesos separados para cada subproceso usando el `clone` syscall para permitirles compartir el espacio de direcciones (y otras cosas). La principal debilidad de este enfoque era que cada hilo tenía un PID diferente, el manejo de la señal estaba roto (desde la perspectiva de los pthreads), etc. Además, el rendimiento no era muy bueno (uso de `SIGUSR` señales para sincronización de subprocesos, consumo de recursos del kernel, etc.), por lo que para superar estos problemas se desarrolló un nuevo sistema de subprocesos denominado NPTL.
+
+La biblioteca NPTL se centró en dos cosas, pero apareció una tercera, por lo que generalmente se considera parte de NPTL. Esas dos cosas fueron la incrustación de subprocesos en una estructura de proceso y funciones. La tercera cosa adicional fue TLS, que no es requerido directamente por NPTL, pero toda la biblioteca de usuario de NPTL depende de ello. Esas mejoras dieron como resultado un rendimiento y una conformidad con los estándares mucho mejores. NPTL es una biblioteca de subprocesos estándar en Linux(TM) sistemas en estos días.
+
+La implementación de FreeBSD Linuxulator se acerca a la NPTL en tres áreas principales. TLS, futexes y PID mangling, que está destinado a simular el Linux(TM) hilos. Más secciones describen cada una de estas áreas.
+
+[[linux26-emu]]
+=== Linux(TM) 2.6 infraestructura de emulación
+
+Estas secciones tratan sobre la forma Linux(TM) se administran los hilos y cómo lo simulamos en FreeBSD.
+
+[[linux26-runtime]]
+==== Determinación del tiempo de ejecución de la emulación 2.6
+
+En Linux(TM)La capa de emulación en FreeBSD admite la configuración de tiempo de ejecución de la versión emulada. Esto se hace a través de man:sysctl[8], a saber `compat.linux.osrelease`. configurando esto man:sysctl[8]afecta el comportamiento en tiempo de ejecución de la capa de emulación. Cuando se establece en 2.6.x, establece el valor de `linux_use_linux26` mientras que el ajuste a otra cosa lo mantiene desarmado. Esta variable (más las variables por prisión del mismo tipo) determina si la infraestructura 2.6 (principalmente manipulación de PID) se usa en el código o no. La configuración de la versión se realiza en todo el sistema y esto afecta a todosLinux(TM) procesos. losman:sysctl[8]no debe cambiarse al ejecutar cualquier Linux(TM)binario, ya que podría dañar las cosas.
+
+[[linux-proc-thread]]
+==== Linux(TM) identificadores de procesos e hilos
+
+La semántica de Linux(TM) Los subprocesos son un poco confusos y utilizan una nomenclatura completamente diferente a la de FreeBSD. Un proceso en Linux(TM) consiste en un `estructura de la tarea` incrustando dos campos identificadores: PID y TGID. PID es _no_ un ID de proceso pero es un ID de hilo. El TGID identifica un grupo de subprocesos, en otras palabras, un proceso. Para procesos de un solo subproceso, el PID es igual al TGID.
+
+El hilo en NPTL es solo un proceso ordinario que tiene TGID no igual a PID y tiene un líder de grupo que no es igual a él (y VM compartida, etc., por supuesto). Todo lo demás sucede de la misma manera que en un proceso ordinario. No hay separación de un estado compartido a alguna estructura externa como en FreeBSD. Esto crea cierta duplicación de información y una posible inconsistencia de datos. los Linux(TM) el kernel parece utilizar task ->; información de grupo en algunos lugares e información de tareas en otros lugares y en realidad no es muy consistente y parece propensa a errores.
+
+cada hilo NPTL se crea mediante una llamada ala `clone` syscall con un conjunto específico de indicadores (más en la siguiente subsección). La NPTL implementa un subproceso estricto 1: 1.
+
+En FreeBSD emulamos hilos NPTL con procesos FreeBSD ordinarios que comparten espacio VM, etc. y la gimnasia PID simplemente se imita en la estructura específica de emulación adjunta al proceso. La estructura adjunta al proceso se ve así:
+
+[.programlisting]
+....
+struct linux_emuldata {
+  pid_t pid;
+
+  int *child_set_tid; /* in clone(): Child.s TID to set on clone */
+  int *child_clear_tid;/* in clone(): Child.s TID to clear on exit */
+
+  struct linux_emuldata_shared *shared;
+
+  int pdeath_signal; /* parent death signal */
+
+  LIST_ENTRY(linux_emuldata) threads; /* list of linux threads */
+};
+....
+
+El PID se usa para identificar el proceso FreeBSD que adjunta esta estructura. los `child_se_tid` y `child_clear_tid` se utilizan para la copia de direcciones TID cuando un proceso sale y se crea. los `shared` puntero apunta a una estructura compartida entre subprocesos. los `pdeath_signal` La variable identifica la señal de muerte del padre y la `threads` El puntero se utiliza para vincular esta estructura a la lista de subprocesos. los `linux_emuldata_shared` estructura se parece a:
+
+[.programlisting]
+....
+struct linux_emuldata_shared {
+
+  int refs;
+
+  pid_t group_pid;
+
+  LIST_HEAD(, linux_emuldata) threads; /* head of list of linux threads */
+};
+....
+
+La `refs` es un contador de referencia que se utiliza para determinar cuándo podemos liberar la estructura para evitar pérdidas de memoria. los `group_pid` es identificar PID (= TGID) de todo el proceso (= grupo de subprocesos). los `threads` puntero es el encabezado de la lista de subprocesos en el proceso.
+
+El `linux_emuldata` La estructura se puede obtener del proceso utilizando `em_find`. el prototipo de la función es:
+
+[.programlisting]
+....
+struct linux_emuldata *em_find(struct proc *, int locked);
+....
+
+Aqui, `proc` es el proceso del que queremos la estructura emuldata y el parámetro bloqueado determina si queremos bloquear o no. Los valores aceptados son `EMUL_DOLOCK` y `EMUL_DOUNLOCK`. Más sobre bloquear más tarde.
+
+[[pid-mangling]]
+==== Destrucción de PID
+
+Because of the described different view knowing what a process ID and thread ID is between FreeBSD and Linux(TM) we have to translate the view somehow. We do it by PID mangling. This means that we fake what a PID (=TGID) and TID (=PID) is between kernel and userland. The rule of thumb is that in kernel (in Linuxulator) PID = PID and TGID = shared -> group pid and to userland we present `PID = shared -> group_pid` and `TID = proc -> p_pid`. The PID member of `linux_emuldata structure` is a FreeBSD PID.
+
+Lo anterior afecta principalmente a las llamadas al sistema getpid, getppid, gettid. Donde usamos PID / TGID respectivamente. En copia de TID en `child_clear_tid` y `child_set_tid` copiamos FreeBSD PID.
+
+[[clone-syscall]]
+==== Clonar syscall
+
+La `clone` syscall es la forma en que se crean los hilos en Linux(TM). El prototipo de syscall se ve así:
+
+[.programlisting]
+....
+int linux_clone(l_int flags, void *stack, void *parent_tidptr, int dummy,
+void * child_tidptr);
+....
+
+El `flags` El parámetro le dice al syscall cómo exactamente se deben clonar los procesos. Como se describió anteriormente, Linux(TM) puede crear procesos compartiendo varias cosas de forma independiente, por ejemplo, dos procesos pueden compartir descriptores de archivo pero no VM, etc. Último byte del `flags` El parámetro es la señal de salida del proceso recién creado. los `stack` parameter if non-`NULL` dice dónde está la pila de subprocesos y si está `NULL` se supone que debemos copiar al escribir la pila del proceso de llamada (es decir, hacer lo normal man:fork[2] lo hace la rutina). los `parent_tidptr` El parámetro se usa como una dirección para copiar el PID del proceso (es decir, el ID del hilo) una vez que el proceso está suficientemente instanciado pero aún no se puede ejecutar. los `tonto` El parámetro está aquí debido a la muy extraña convención de llamada de esta llamada al sistema en i386. Utiliza los registros directamente y no deja que el compilador lo haga, lo que resulta en la necesidad de una llamada al sistema ficticia. los `child_tidptr` El parámetro se utiliza como dirección para copiar PID una vez que el proceso ha terminado de bifurcarse y cuando el proceso finaliza.
+
+La propia llamada al sistema procede estableciendo los indicadores correspondientes en función de los indicadores pasados. Por ejemplo, `CLONE_VM` mapas a RFMEM (compartir VM), etc. La única nit aquí es `CLONE_FS` y `CLONE_FILES` porque FreeBSD no permite configurar esto por separado, por lo que lo falsificamos al no configurar RFFDG (copia de la tabla fd y otra información fs) si alguno de estos está definido. Esto no causa ningún problema, porque esos indicadores siempre se colocan juntos. Después de configurar las banderas, el proceso se bifurca utilizando el `fork1` rutina, el proceso está instrumentado para que no se ponga en una cola de ejecución, es decir, no se establezca como ejecutable. Una vez finalizada la bifurcación, posiblemente volvamos a hacer el proceso recién creado para emular `CLONE_PARENT` semántica. La siguiente parte es crear los datos de emulación. Hilos en Linux(TM) no envía una señal a sus padres, por lo que establecemos la señal de salida en 0 para deshabilitar esto. Después de esa configuración de `child_set_tid` and `child_clear_tid` se realiza habilitando la funcionalidad más adelante en el código. En este punto copiamos el PID a la dirección especificada por `parent_tidptr`. la configuración de la pila de procesos se realiza simplemente reescribiendo el marco del hilo `%esp` registrar (`%rsp` en amd64). La siguiente parte es configurar TLS para el proceso recién creado. Después de este man:vfork[2] semantics podría ser emulado y finalmente el proceso recién creado se coloca en una cola de ejecución y copia su PID al proceso padre a través de `clone` el valor de retorno está hecho.
+
+El `clone` syscall es capaz y de hecho se usa para emular el clásico man:fork[2] y man:vfork[2] syscalls. Glibc más nuevo en un caso de usos del kernel 2.6 `clonar` para implementar man:fork[2] y man:vfork[2] syscalls.
+
+[[locking]]
+==== Cierre
+
+The locking is implemented to be per-subsystem because we do not expect a lot of contention on these. There are two locks: `emul_lock` used to protect manipulating of `linux_emuldata` and `emul_shared_lock` used to manipulate `linux_emuldata_shared`. The `emul_lock` is a nonsleepable blocking mutex while `emul_shared_lock` is a sleepable blocking `sx_lock`. Because of the per-subsystem locking we can coalesce some locks and that is why the em find offers the non-locking access.
+
+[[tls]]
+=== TLS
+
+Esta sección trata sobre TLS, también conocido como almacenamiento local de subprocesos.
+
+[[trheading-intro]]
+==== Introducción al subproceso
+
+Los subprocesos en ciencias de la computación son entidades dentro de un proceso que se pueden programar de forma independiente entre sí. Los subprocesos del proceso comparten datos de todo el proceso (descriptores de archivo, etc.) pero también tienen su propia pila para sus propios datos. A veces existe la necesidad de datos de todo el proceso específicos para un hilo dado. Imagina un nombre del hilo en ejecución o algo así. Lo tradicional UNIX(TM) API de subprocesos, pthreads proporciona una forma de hacerlo a través de man:pthread_key_create[3], man:pthread_setspecific[3] y man:pthread_getspecific[3] donde un hilo puede crear una clave para los datos locales del hilo y usar man:pthread_getspecific[3] o man:pthread_getspecific[3] para manipular esos datos. Puede ver fácilmente que esta no es la forma más cómoda de lograrlo. Entonces, varios productores de compiladores C / C ++ introdujeron una mejor manera. Definieron un nuevo hilo de palabra clave modificadora que especifica que una variable es específica del hilo. También se desarrolló un nuevo método para acceder a tales variables (al menos en i386). los pthreads El método tiende a implementarse en el espacio de usuario como una tabla de búsqueda trivial. El rendimiento de esta solución no es muy bueno. Por lo tanto, el nuevo método usa (en i386) registros de segmento para direccionar un segmento, donde el área TLS se almacena, por lo que el acceso real de una variable de subproceso es simplemente agregar el registro de segmento a la dirección, por lo que se direcciona a través de ella. Los registros de segmento suelen ser `%gs` and `%fs` actuando como selectores de segmento. Cada hilo tiene su propia área donde se almacenan los datos locales del hilo y el segmento se debe cargar en cada cambio de contexto. Este método es muy rápido y se utiliza casi exclusivamente en todo el i386. UNIX(TM) mundo. Tanto FreeBSD como Linux(TM) implementar este enfoque y produce muy buenos resultados. El único inconveniente es la necesidad de volver a cargar el segmento en cada cambio de contexto que puede ralentizar los cambios de contexto. FreeBSD intenta evitar esta sobrecarga usando solo 1 descriptor de segmento para esto mientras Linux(TM) utiliza 3. Lo interesante es que casi nada utiliza más de 1 descriptor (solo Wine parece usar 2) entoncesLinux(TM) paga este precio innecesario por los cambios de contexto.
+
+[[i386-segs]]
+==== Segmentos en i386
+
+La arquitectura i386 implementa los llamados segmentos. Un segmento es una descripción de un área de la memoria. La dirección base (parte inferior) del área de memoria, el final de la misma (techo), tipo, protección, etc. Se puede acceder a la memoria descrita por un segmento utilizando registros de selector de segmento (`%cs`, `%ds`, `%ss`, `%es`, `%fs`, `%gs`). Por ejemplo, supongamos que tenemos un segmento cuya dirección base es 0x1234 y longitud y este código:
+
+[.programlisting]
+....
+mov %edx,%gs:0x10
+....
+
+Esto cargará el contenido del `%edx` registrarse en la ubicación de memoria 0x1244. Algunos registros de segmento tienen un uso especial, por ejemplo `%cs` se utiliza para el segmento de código y `%ss` se utiliza para el segmento de pila pero `%fs` y `%gs` generalmente no se utilizan. Los segmentos se almacenan en una tabla GDT global o en una tabla LDT local. Se accede a LDT a través de una entrada en el GDT. El LDT puede almacenar más tipos de segmentos. LDT puede ser por proceso. Ambas tablas definen hasta 8191 entradas.
+
+[[linux-i386]]
+==== Implementación en Linux(TM) i386
+
+Hay dos formas principales de configurar TLS en Linux(TM). se puede configurar al clonar un proceso usando el `clone` syscall o puede llamar `set_thread_area`. Cuando pasa un proceso `CLONE_SETTLS` bandera a `clonar`, el kernel espera la memoria apuntada por el `%esi` registrar unLinux(TM) representación en el espacio de usuario de un segmento, que se traduce a la representación de máquina de un segmento y se carga en una ranura GDT. La ranura GDT se puede especificar con un número o se puede usar -1, lo que significa que el sistema debe elegir la primera ranura libre. En la práctica, la gran mayoría de los programas utilizan solo una entrada TLS y no se preocupa por el número de la entrada. Aprovechamos esto en la emulación y de hecho dependemos de ello.
+
+[[tls-emu]]
+==== Emulation of Linux(TM) TLS
+
+[[tls-i386]]
+===== i386
+
+La carga de TLS para el hilo actual se realiza llamando `set_thread_area` mientras carga TLS para un segundo proceso en `clone` se hace en el bloque separado en `clone`. Esas dos funciones son muy similares. La única diferencia es la carga real del segmento GDT, que ocurre en el siguiente cambio de contexto para el proceso recién creado mientras `set_thread_area` debe cargar esto directamente. El código básicamente hace esto. Copia el Linux(TM) descriptor de segmento de formulario del área de usuario. El código busca el número del descriptor, pero debido a que este difiere entre FreeBSD y Linux(TM) lo fingimos un poco. Solo admitimos índices de 6, 3 y -1. El 6 es genuino Linux(TM) número, 3 es uno genuino de FreeBSD y -1 significa autoselección. Luego establecemos el número de descriptor en constante 3 y lo copiamos en el espacio de usuario. Confiamos en el proceso del espacio de usuario utilizando el número del descriptor, pero esto funciona la mayor parte del tiempo (nunca he visto un caso en el que esto no haya funcionado) ya que el proceso del espacio de usuario normalmente pasa en 1. Luego, convertimos el descriptor del Linux(TM)formulario a un formulario dependiente de la máquina (es decir, formulario independiente del sistema operativo) y cópielo en el descriptor de segmento definido de FreeBSD. Finalmente podemos cargarlo. Asignamos el descriptor a los subprocesos PCB (bloque de control de proceso) y cargamos el `%gs` segmento usando `load_gs`. Esta carga debe hacerse en un tramo crítico para que nada nos interrumpa. los `CLONE_SETTLS` El caso funciona exactamente así, solo la carga usando `load_gs` no se realiza. El segmento utilizado para esto (segmento número 3) se comparte para este uso entre los procesos FreeBSD y Linux(TM) procesos para que el Linux(TM) La capa de emulación no agrega ninguna sobrecarga sobre FreeBSD simple.
+
+[[tls-amd64]]
+===== amd64
+
+La implementación de amd64 es similar a la de i386, pero inicialmente no se utilizó un descriptor de segmento de 32 bits para este propósito (por lo tanto, ni siquiera los usuarios nativos de TLS de 32 bits funcionaron), por lo que tuvimos que agregar dicho segmento e implementar su carga en cada cambio de contexto (cuando un se establece el uso de señalización de bandera de 32 bits). Aparte de esto, la carga de TLS es exactamente la misma, solo que los números de segmento son diferentes y el formato del descriptor y la carga difieren ligeramente.
+
+[[futexes]]
+=== Futexes
+
+[[sync-intro]]
+==== Introducción a la sincronización
+
+Los subprocesos necesitan algún tipo de sincronización y POSIX(TM) proporciona algunos de ellos: mutex para exclusión mutua, bloqueos de lectura y escritura para exclusión mutua con una proporción sesgada de lecturas y escrituras y variables de condición para señalar un cambio de estado. Es interesante notar quePOSIX(TM) La API de subprocesos carece de soporte para semáforos. Esas implementaciones de rutinas de sincronización dependen en gran medida del tipo de soporte de subprocesos que tenemos. En el modelo puro 1: M (espacio de usuario), la implementación se puede realizar únicamente en el espacio de usuario y, por lo tanto, es muy rápida (las variables de condición probablemente terminarán implementándose mediante señales, es decir, no rápido) y simple. En el modelo 1: 1, la situación también es bastante clara: los subprocesos deben sincronizarse utilizando las instalaciones del kernel (lo cual es muy lento porque se debe realizar una llamada al sistema). El escenario mixto M: N simplemente combina el primer y segundo enfoque o se basa únicamente en el kernel. La sincronización de subprocesos es una parte vital de la programación habilitada para subprocesos y su rendimiento puede afectar mucho al programa resultante. Pruebas de rendimiento recientes en el sistema operativo FreeBSD mostraron que una implementación mejorada de sx_lock produjo un 40% de aceleración en _ZFS_ (un usuario pesado de sx), esto es algo dentro del kernel pero muestra claramente cuán importante es el rendimiento de las primitivas de sincronización.
+
+Threaded programs should be written with as little contention on locks as possible. Otherwise, instead of doing useful work the thread just waits on a lock. Because of this, the most well written threaded programs show little locks contention.
+
+[[futex-intro]]
+==== Introducción a los futexes
+
+Linux(TM) implementa subprocesos 1: 1, es decir, tiene que usar primitivas de sincronización en el kernel. Como se indicó anteriormente, los programas con subprocesos bien escritos tienen poca contención de bloqueo. Entonces, una secuencia típica podría realizarse como dos contadores de referencia mutex de aumento/disminución atómicos, que es muy rápido, como se presenta en el siguiente ejemplo:
+
+[.programlisting]
+....
+pthread_mutex_lock(&mutex);
+...
+pthread_mutex_unlock(&mutex);
+....
+
+El subproceso 1: 1 nos obliga a realizar dos llamadas al sistema para esas llamadas mutex, lo cual es muy lento.
+
+La solución Linux(TM) 2.6 implementos se llama futexes. Los futexes implementan la verificación de contención en el espacio de usuario y llaman a las primitivas del núcleo solo en caso de contención. Por tanto, el caso típico tiene lugar sin ninguna intervención del núcleo. Esto produce una implementación de primitivas de sincronización razonablemente rápida y flexible.
+
+[[futex-api]]
+==== Futex API
+
+La llamada al sistema futex se ve así:
+
+[.programlisting]
+....
+int futex(void *uaddr, int op, int val, struct timespec *timeout, void *uaddr2, int val3);
+....
+
+En este ejemplo `uaddr` es una dirección del mutex en el espacio de usuario, `op` es una operación que estamos a punto de realizar y los demás parámetros tienen un significado por operación.
+
+Los Futexes implementan las siguientes operaciones:
+
+* `FUTEX_WAIT`
+* `FUTEX_WAKE`
+* `FUTEX_FD`
+* `FUTEX_REQUEUE`
+* `FUTEX_CMP_REQUEUE`
+* `FUTEX_WAKE_OP`
+
+[[futex-wait]]
+===== FUTEX_WAIT
+
+Esta operación verifica que en la dirección `uaddr` el valor `val` está escrito. Si no, `EWOULDBLOCK` se devuelve, de lo contrario, el hilo se pone en cola en el futex y se suspende. Si el argumento `timeout` es distinto de cero, especifica el tiempo máximo para dormir; de lo contrario, el sueño es infinito.
+
+[[futex-wake]]
+===== FUTEX_WAKE
+
+Esta operación toma un futex en `uaddr` y se despierta `val` Primeros futexes en cola en este futex.
+
+[[futex-fd]]
+===== FUTEX_FD
+
+Esta operación asocia un descriptor de archivo con un futex dado.
+
+[[futex-requeue]]
+===== FUTEX_REQUEUE
+
+Esta operación toma `val` hilos en cola en futex en `uaddr`, Los despierta y toma `val2` siguientes hilos y los coloca en futex en `uaddr2`.
+
+[[futex-cmp-requeue]]
+===== FUTEX_CMP_REQUEUE
+
+Esta operación hace lo mismo que `FUTEX_REQUEUE` pero comprueba que `val3` igual a `val` primero.
+
+[[futex-wake-op]]
+===== FUTEX_WAKE_OP
+
+Esta operación realiza una operación atómica en `val3` (que contiene algún otro valor codificado) y `uaddr`. Entonces se despierta `val` hilos en futex en `uaddr` y si la operación atómica devolvió un número positivo, se despierta `val2` hilos en futex en `uaddr2`.
+
+Las operaciones implementadas en `FUTEX_WAKE_OP`:
+
+* `FUTEX_OP_SET`
+* `FUTEX_OP_ADD`
+* `FUTEX_OP_OR`
+* `FUTEX_OP_AND`
+* `FUTEX_OP_XOR`
+
+[NOTE]
+====
+No hay `val2` parámetro en el prototipo futex. los `val2` es tomado de la `struct timespec *timeout` parámetro para operaciones `FUTEX_REQUEUE`, `FUTEX_CMP_REQUEUE` y `FUTEX_WAKE_OP`.
+====
+
+[[futex-emu]]
+==== Emulación Futex en FreeBSD
+
+La emulación futex en FreeBSD se toma de NetBSD y nosotros la ampliamos. Se coloca en [.filename]#linux_futex.c# and [.filename]#linux_futex.h# archivos. la `futex` estructura se parece a:
+
+[.programlisting]
+....
+struct futex {
+  void *f_uaddr;
+  int f_refcount;
+
+  LIST_ENTRY(futex) f_list;
+
+  TAILQ_HEAD(lf_waiting_paroc, waiting_proc) f_waiting_proc;
+};
+....
+
+Y la estructura `waiting_proc` es:
+
+[.programlisting]
+....
+struct waiting_proc {
+
+  struct thread *wp_t;
+
+  struct futex *wp_new_futex;
+
+  TAILQ_ENTRY(waiting_proc) wp_list;
+};
+....
+
+
+[[futex-get]]
+===== futex_get / futex_put
+
+Un futex se obtiene utilizando el `futex_get` función, que busca en una lista lineal de futexes y devuelve el encontrado o crea un nuevo futex. Al liberar un futex del uso, lo llamamos `futex_put` función, que disminuye un contador de referencia del futex y si el refcount llega a cero se libera.
+
+[[futex-sleep]]
+===== futex_sleep
+
+Cuando un futex pone en cola un hilo para dormir, crea un `working_proc` estructura y coloca esta estructura en la lista dentro de la estructura futex, entonces solo realiza una man:tsleep[9] suspender el hilo. El tiempo de sueño se puede agotar. Después man:tsleep[9] devuelve (el hilo se despertó o se agotó el tiempo de espera) el `working_proc` La estructura se elimina de la lista y se destruye. Todo esto se hace en el `futex_sleep` función. Si nos despertaran de `futex_wake` Nosotros tenemos `wp_new_futex` establecido para que podamos dormir en él. De esta manera, la puesta en cola real se realiza en esta función..
+
+[[futex-wake-2]]
+===== futex_wake
+
+Despertar un hilo durmiendo en un futex se realiza en el `futex_wake` función. Primero en esta función imitamos el extraño Linux(TM) comportamiento, donde despierta N subprocesos para todas las operaciones, la única excepción es que las operaciones REQUEUE se realizan en N + 1 subprocesos. Pero esto generalmente no hace ninguna diferencia ya que estamos despertando todos los hilos. A continuación, en la función en el bucle, activamos n subprocesos, después de esto, verificamos si hay un nuevo futex para poner en cola. Si es así, ponemos en cola hasta n2 subprocesos en el nuevo futex. Esto coopera con `futex_sleep`.
+
+[[futex-wake-op-2]]
+===== futex_wake_op
+
+La `FUTEX_WAKE_OP` El funcionamiento es bastante complicado. Primero obtenemos dos futexes en direcciones `uaddr` and `uaddr2` luego realizamos la operación atómica usando `val3` and `uaddr2`. Then `val` los camareros en el primer futex se despiertan y si la condición de operación atómica se mantiene, nos despertamos `val2` (es decir. `timeout`) camarero en el segundo futex.
+
+[[futex-atomic-op]]
+===== operación atómica futex
+
+La operación atómica toma dos parámetros `encoded_op` y `uaddr`. La operación codificada codifica la operación en sí, comparando valor, argumento de operación y argumento de comparación. El pseudocódigo para la operación es como este:
+
+[.programlisting]
+....
+oldval = *uaddr2
+*uaddr2 = oldval OP oparg
+....
+
+Y esto se hace de forma atómica. Primero una copia del número en `uaddr` se realiza y se hace la operación. El código maneja fallas de página y si no ocurre ninguna falla de página `oldval` se compara con `cmparg` argumento con comparador cmp.
+
+[[futex-locking]]
+===== Bloqueo futex
+
+La implementación de Futex utiliza dos listas de bloqueo que protegen `sx_lock` y cerraduras globales (ya sea gigante u otra `sx_lock`). Cada operación se realiza bloqueada desde el principio hasta el final.
+
+[[syscall-impl]]
+=== Implementación de varias llamadas al sistema
+
+En esta sección voy a describir algunas llamadas al sistema más pequeñas que vale la pena mencionar porque su implementación no es obvia o esas llamadas al sistema son interesantes desde otro punto de vista.
+
+[[syscall-at]]
+==== *en familia de llamadas al sistema
+
+Durante el desarrollo de Linux(TM)2.6.16 kernel, se agregaron las llamadas al sistema * at. Esas llamadas al sistema (`openat` por ejemplo) funcionan exactamente como sus contrapartes at-less con la ligera excepción de `dirfd` parámetro. Este parámetro cambia donde está el archivo dado, en el que se va a realizar la llamada al sistema. Cuando el `filename` el parámetro es absoluto `dirfd` se ignora pero cuando la ruta al archivo es relativa, se trata de la obra. los `dirfd` El parámetro es un directorio relativo al que se comprueba la ruta relativa. los `dirfd` parámetro es un descriptor de archivo de algún directorio o `AT_FDCWD`. Entonces, por ejemplo, el `openat` syscall puede ser así:
+
+[.programlisting]
+....
+file descriptor 123 = /tmp/foo/, current working directory = /tmp/
+
+openat(123, /tmp/bah\, flags, mode)	/* opens /tmp/bah */
+openat(123, bah\, flags, mode)		/* opens /tmp/foo/bah */
+openat(AT_FDWCWD, bah\, flags, mode)	/* opens /tmp/bah */
+openat(stdio, bah\, flags, mode)	/* returns error because stdio is not a directory */
+....
+
+Esta infraestructura es necesaria para evitar carreras al abrir archivos fuera del directorio de trabajo. Imagine que un proceso consta de dos subprocesos, el subproceso A y el subproceso B. Problemas del subproceso A `abrir(./tmp/foo/bah., flags, mode)` y antes de regresar se reemplaza y se ejecuta el hilo B. El hilo B no se preocupa por las necesidades del hilo A y cambia el nombre o elimina [.filename]#/tmp/foo/#. Tenemos una carrera. Para evitar esto podemos abrir [.filename]#/tmp/foo# and use it as `dirfd` para `openat` syscall. Esto también permite al usuario implementar directorios de trabajo por subproceso.
+
+Linux(TM) familia de *at syscalls contiene: `linux_openat`, `linux_mkdirat`, `linux_mknodat`, `linux_fchownat`, `linux_futimesat`, `linux_fstatat64`, `linux_unlinkat`, `linux_renameat`, `linux_linkat`, `linux_symlinkat`, `linux_readlinkat`, `linux_fchmodat` and `linux_faccessat`. Todos estos se implementan utilizando el modificado man:namei[9] capa de envoltura rutinaria y simple.
+
+[[implementation]]
+===== Implementación
+
+La implementación se realiza alterando el man:namei[9] rutina (descrita arriba) para tomar un parámetro adicional `dirfd` en su `nameidata` estructura, que especifica el punto de inicio de la búsqueda de nombre de ruta en lugar de utilizar el directorio de trabajo actual cada vez. La resolución de `dirfd` desde el número de descriptor de archivo hasta un vnode se realiza en nativo *en syscalls. Cuando `dirfd` is `AT_FDCWD` el `dvp` entrada en `nameidata` la estructura es `NULL` pero cuando `dirfd` es un número diferente, obtenemos un archivo para este descriptor de archivo, verificamos si este archivo es válido y si hay un vnode adjunto, obtenemos un vnode. Luego verificamos que este vnode sea un directorio. En el actual man:namei[9] rutina simplemente sustituimos el `dvp` vnode para `dp` variable en el man:namei[9] función, que determina el punto de partida. los man:namei[9] no se utiliza directamente, sino a través de un rastro de diferentes funciones en varios niveles. Por ejemplo el `openat` va así:
+
+[.programlisting]
+....
+openat() --> kern_openat() --> vn_open() -> namei()
+....
+
+Por esta razón `kern_open` y `vn_open` debe modificarse para incorporar el adicional `dirfd` parámetro. No se crea una capa de compatibilidad para aquellos porque no hay muchos usuarios de esta y los usuarios se pueden convertir fácilmente. Esta implementación general permite a FreeBSD implementar su propio *en llamadas al sistema. Esto se está discutiendo ahora mismo.
+
+[[ioctl]]
+==== Ioctl
+
+La interfaz ioctl es bastante frágil debido a su generalidad. Tenemos que tener en cuenta que los dispositivos difieren entre Linux(TM) y FreeBSD, por lo que se debe tener cuidado para que la emulación de ioctl funcione correctamente. El manejo de ioctl se implementa en [.filename]#linux_ioctl.c#, donde `linux_ioctl` la función está definida. Esta función simplemente itera sobre conjuntos de manejadores ioctl para encontrar un manejador que implemente un comando dado. El syscall ioctl tiene tres parámetros, el descriptor de archivo, el comando y un argumento. El comando es un número de 16 bits, que en teoría se divide en 8 bits altos que determinan la clase del comando ioctl y 8 bits bajos, que son el comando real dentro del conjunto dado. La emulación aprovecha esta división. Implementamos controladores para cada conjunto, como `sound_handler` o `disk_handler`.Cada controlador tiene un comando máximo y un comando mínimo definido, que se utiliza para determinar qué controlador se utiliza. Hay leves problemas con este enfoque porque Linux(TM) no usa la división de conjuntos de manera consistente, por lo que a veces los ioctls de un conjunto diferente están dentro de un conjunto al que no deberían pertenecer (ioctls genéricos SCSI dentro del conjunto cdrom, etc.). FreeBSD actualmente no implementa muchos Linux(TM)ioctls (en comparación con NetBSD, por ejemplo) pero el plan es portarlos de NetBSD. La tendencia es usar Linux(TM) ioctls incluso en los controladores nativos de FreeBSD debido a la fácil migración de las aplicaciones.
+
+[[debugging]]
+==== Depuración
+
+Cada llamada al sistema debería ser depurable. Para ello introducimos una pequeña infraestructura. Tenemos la función ldebug, que indica si una llamada al sistema determinada debe depurarse (configurable mediante un sysctl). Para imprimir tenemos macros LMSG y ARGS. Se utilizan para alterar una cadena imprimible para mensajes de depuración uniformes.
+
+[[conclusion]]
+== Conclusión
+
+[[results]]
+=== Resultados
+
+En abril de 2007 el Linux(TM) La capa de emulación es capaz de emular la Linux(TM) 2.6.16 kernel bastante bien. Los problemas restantes se refieren a futexes, inacabados * en la familia de llamadas al sistema, entrega de señales problemáticas, falta `epoll` y `inotify` y probablemente algunos errores que aún no hemos descubierto. A pesar de esto, somos capaces de ejecutar básicamente todos los Linux(TM) programas incluidos en FreeBSD Ports Collection con Fedora Core 4 en 2.6.16 y hay algunos informes rudimentarios de éxito con Fedora Core 6 en 2.6.16. Fedora Core 6 linux_base se comprometió recientemente para permitir algunas pruebas adicionales de la capa de emulación y darnos algunas pistas más sobre dónde deberíamos poner nuestro esfuerzo en implementar las cosas que faltan.
+
+Somos capaces de ejecutar las aplicaciones más utilizadas como package:www/linux-firefox[], package:net-im/skype[] y algunos juegos de la colección Ports. Algunos de los programas exhiben un mal comportamiento en la emulación 2.6, pero esto está actualmente bajo investigación y es de esperar que se solucione pronto. La única gran aplicación que se sabe que no funciona es la Linux(TM)Java(TM) Kit de desarrollo y esto se debe al requisito de `epoll` instalación que no está directamente relacionada con la Linux(TM) kernel 2.6.
+
+Esperamos habilitar la emulación 2.6.16 por defecto algún tiempo después del lanzamiento de FreeBSD 7.0 al menos para exponer las partes de la emulación 2.6 para pruebas más amplias. Una vez hecho esto, podemos cambiar a Fedora Core 6 linux_base, que es el plan definitivo.
+
+[[future-work]]
+=== Trabajo futuro
+
+El trabajo futuro debe centrarse en solucionar los problemas restantes con futexes, implementar el resto de la familia de llamadas al sistema * at, arreglar la entrega de señal y posiblemente implementar el `epoll` y `inotify` instalaciones.
+
+Esperamos poder ejecutar los programas más importantes sin problemas pronto, por lo que podremos cambiar a la emulación 2.6 por defecto y hacer que Fedora Core 6 sea la linux_base predeterminada porque nuestro Fedora Core 4 que usamos actualmente ya no es compatible.
+
+El otro objetivo posible es compartir nuestro código con NetBSD y DragonflyBSD. NetBSD tiene algo de soporte para la emulación 2.6 pero está lejos de estar terminado y no se ha probado realmente. DragonflyBSD ha expresado cierto interés en portar las mejoras 2.6.
+
+Generalmente, como Linux(TM) desarrolla nos gustaría mantenernos al día con su desarrollo, implementando syscalls recién agregadas. El empalme viene a la mente primero. Algunas llamadas al sistema ya implementadas también están muy paralizadas, por ejemplo `mremap` y otros. También se pueden realizar algunas mejoras de rendimiento, bloqueo de grano más fino y otros.
+
+[[team]]
+=== Equipo
+
+Colaboré en este proyecto con (en orden alfabético):
+
+* John Baldwin mailto:jhb@FreeBSD.org[jhb@FreeBSD.org]
+* Konstantin Belousov mailto:kib@FreeBSD.org[kib@FreeBSD.org]
+* Emmanuel Dreyfus
+* Scot Hetzel
+* Jung-uk Kim mailto:jkim@FreeBSD.org[jkim@FreeBSD.org]
+* Alexander Leidinger mailto:netchild@FreeBSD.org[netchild@FreeBSD.org]
+* Suleiman Souhlal mailto:ssouhlal@FreeBSD.org[ssouhlal@FreeBSD.org]
+* Li Xiao
+* David Xu mailto:davidxu@FreeBSD.org[davidxu@FreeBSD.org]
+
+Me gustaría agradecer a todas esas personas por sus consejos, revisiones de código y apoyo general.
+
+[[literatures]]
+== Literaturas
+
+. Marshall Kirk McKusick - George V. Nevile-Neil. Diseño e implementación del sistema operativo FreeBSD. Addison-Wesley, 2005.
+. https://tldp.org[https://tldp.org]
+. https://www.kernel.org[https://www.kernel.org]

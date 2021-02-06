@@ -1,0 +1,362 @@
+---
+title: Para personas nuevas en FreeBSD y en UNIX®
+authors:
+  - author: Annelise Anderson
+    email: andrsn@andrsn.stanford.edu
+releaseinfo: "$FreeBSD$" 
+trademarks: ["freebsd", "ibm", "microsoft", "opengroup", "general"]
+---
+
+= Para personas nuevas en FreeBSD y en UNIX(R)
+:doctype: article
+:toc: macro
+:toclevels: 1
+:icons: font
+:sectnums:
+:sectnumlevels: 6
+:source-highlighter: rouge
+:experimental:
+
+[.abstract-title]
+Resumen
+
+¡Felicidades por instalar FreeBSD! Esta introducción es para personas nuevas tanto en FreeBSD _como en_ UNIX(TM)--entonces, empecemos desde lo básico.
+
+'''
+
+toc::[]
+
+[[in-and-out]]
+== Iniciar sesión y salir
+
+Inicie sesión (cuando vea `login:`) con el usuario que creó durante la instalación o como usuario `root`. (Su instalación de FreeBSD ya tendrá una cuenta para el usuario `root`; este usuario puede acceder a cualquier lugar y hacer cualquier cosa, incluyendo borrar archivos esenciales del sistema, ¡tenga cuidado!) Los símbolos `%` y `#` en el prompt (el suyo puede ser diferente) indican el tipo de usuario, el símbolo `%` indica que es un usuario común y el símbolo `#` indica que el usuario es `root`.
+
+Para cerrar sesión (y obtener un nuevo prompt de `login:`), escriba:
+
+[source,bash]
+....
+# exit
+....
+
+tantas veces como sean necesarias. Presione kbd:[enter] después de escribir los comandos, y recuerde que UNIX(TM) es sensible a las mayúsculas y minúsculas (case-sensitive)--escriba `exit`, no `EXIT`.
+
+Para apagar el ordenador, escriba:
+
+[source,bash]
+....
+# /sbin/shutdown -h now
+....
+
+O para reiniciar, escriba
+
+[source,bash]
+....
+# /sbin/shutdown -r now
+....
+
+o
+
+[source,bash]
+....
+# /sbin/reboot
+....
+
+También puede reiniciar con kbd:[Ctrl+Alt+Delete]. Espere un poco a que termine el proceso. Esta secuencia de teclas es el equivalente a `/sbin/reboot` en las versiones recientes de FreeBSD, y por supuesto, este procedimiento es mucho, mucho mejor que pulsar el botón de reinicio. Usted no quiere tener que reinstalar el sistema, ¿no es así?
+
+[[adding-a-user]]
+== Agregar un usuario con privilegios de root
+
+Si no creó ningún usuario cuando instaló el sistema y, por lo tanto, inició sesión como `root`, probablemente debería crear un usuario ahora con
+
+[source,bash]
+....
+# adduser
+....
+
+La primera vez que use `adduser`, es posible que le solicite algunos valores por defecto para guardar. Es posible que desee hacer que man:csh[1] sea la shell predeterminada en lugar de man:sh[1], si le ha sugerido `sh` como predeterminado. De lo contrario, simplemente pulse enter para aceptar cada valor predeterminado. Estos valores predeterminados se guardan en [.filename]#/etc/adduser.conf#, un archivo editable.
+
+Supongamos que crea el usuario `jack`, con el nombre completo, _Jack Benimble_. Proporcione a `jack` una contraseña si la seguridad (incluso si hay niños alrededor que pudieran golpear el teclado) es un problema. Cuando le pregunte si desea añadir a `jack` a otros grupos, escriba `wheel`
+
+[source,bash]
+....
+El grupo del login es "jack". Añadir a jack a otros grupos: wheel
+....
+
+Esto permitirá iniciar sesión como `jack` y usar el comando man:su[1] para convertirse en el usuario `root`. De esta forma, no volverá a ser reprochado por iniciar sesión como `root`.
+
+Puede finalizar en cualquier momento el comando `adduser` pulsando la combinación de teclas kbd:[Ctrl+C]. Al final del comando, también tendrá la oportunidad de aprobar su nuevo usuario, o, en caso contrario, no hacerlo pulsando la tecla kbd:[n]. Es posible que desee crear un segundo usuario, de esta forma, si al editar los archivos del inicio de sesión de `jack` algo va mal, tenga un usuario de reserva.
+
+Una vez que haya hecho esto, utilice el comando `exit` para volver al prompt de inicio de sesión e iniciar sesión como `jack`. En general, es una buena idea hacer la mayor cantidad posible de trabajo como usuario común que no tenga el poder --y el riesgo-- del usuario `root`.
+
+Si ya creó un usuario y desea que sea capaz de ejecutar el comando `su` para convertirse en `root`, puede iniciar sesión como `root` y editar el archivo [.filename]#/etc/group#, añadiendo al usuario `jack` a la primera línea (en el grupo `wheel`). Pero primero debe practicar con man:vi[1], el editor de texto -- o use un editor de texto más simple, man:ee[1], instalado en las versiones recientes de FreeBSD.
+
+Para eliminar un usuario, utilice el comando `rmuser`.
+
+[[looking-around]]
+== Echando un vistazo
+
+Inicie sesión como un usuario normal, eche un vistazo y pruebe algunos comandos que accederán a las fuentes de ayuda e información de FreeBSD.
+
+Aquí se describen algunos comandos y lo que hacen:
+
+`id`::
+¡Le dice quién es!
+
+`pwd`::
+Le muestra dónde está--el directorio de trabajo actual.
+
+`ls`::
+Lista los archivos en el directorio actual.
+
+`ls -F`::
+Lista los archivos del directorio actual con un `*` después de los ejecutables, un `/` después de los directorios y una `@` después de los enlaces simbolicos.
+
+`ls -l`::
+Muestra los archivos en formato largo: tamaño, fecha, permisos.
+
+`ls -a`::
+Lista los archivos ocultos "dot" junto con los demás. Si es `root`, los archivos "dot" se mostrarán sin la opción `-a`.
+
+`cd`::
+Cambia el directorio actual de trabajo. El comando `cd ..` sube un nivel; tenga en cuenta el espacio después del comando `cd`. El comando `cd /usr/local` le lleva a ese mismo directorio. El comando `cd ~` le lleva al directorio home de la persona que inició sesión, por ejemplo, [.filename]#/usr/home/jack#. Pruebe el comando `cd /cdrom`, y después el comando `ls`, para comprobar si el CDROM está montado y funcionando.
+
+`less _filename_`::
+Le permite ver un archivo (llamado _filename_) sin tener que editarlo. Pruebe con el comando `less /etc/fstab`. Escriba `q` para salir.
+
+`cat _filename_`::
+Muestra el contenido del archivo _filename_ en pantalla. Si el contenido es demasiado largo y solo puede ver el final del archivo, presione kbd:[ScrollLock] y use la tecla kbd:[up-arrow] para retroceder; también puede usar kbd:[ScrollLock] en las páginas del manual. Vuelva a presionar de nuevo kbd:[ScrollLock] para dejar de desplazarse. Es posible que también desee probar el comando `cat` en algunos de los archivos dot de su directorio home -- `cat .cshrc`, `cat .login`, `cat .profile`.
+
+Se dará cuenta de que el archivo [.filename]#.cshrc# contiene algunos alias para el comando `ls` (son muy convenientes). Puede añadir otros alias editando el archivo [.filename]#.cshrc#. Puede poner estos alias a disposición de todos los usuarios del sistema colocándolos en el archivo de configuración global de `csh`, ubicado en [.filename]#/etc/csh.cshrc#.
+
+[[getting-help]]
+== Obteniendo ayuda e información
+
+Aquí tiene algunas fuentes útiles de ayuda. La palabra _Text_ debe ser reemplazada por un texto de su elección--generalmente, un comando o un nombre de archivo.
+
+`apropos _text_`::
+Todo lo que contiene la cadena _text_ en la `base de datos whatis`.
+
+`man _text_`::
+La página del manual para _text_. La principal fuente de documentación en los sistemas UNIX(TM). `man ls` le indicará todas las formas de usar el comando `ls`. Presione la tecla kbd:[Enter] para desplazarse por el texto, kbd:[Ctrl+B] para retroceder una página, kbd:[Ctrl+F] para avanzar, kbd:[q] o kbd:[Ctrl+C] para salir.
+
+`which _text_`::
+Le indica dónde se encuentra la ruta del comando _text_.
+
+`locate _text_`::
+Le indica todas las rutas donde se encuentre el texto _text_.
+
+`whatis _text_`::
+Le indica qué hace el comando _text_ y la página del manual. Escribiendo `whatis *` le indicará todos los binarios del directorio actual.
+
+`whereis _text_`::
+Encuentra el archivo _text_, informándole de su ruta completa.
+
+Es posible que desee probar el comando `whatis` en algunos comandos útiles como `cat`, `more`, `grep`, `mv`, `find`, `tar`, `chmod`, `chown`, `date`, y `script`. El comando `more` le permite leer una página entera a la vez como en DOS, por ejemplo: `ls -l | more` o `more _filename_`. El carácter `\*` funciona como un carácter comodín, por ejemplo, el comando `ls w*` le mostrará los archivos que comienzan con `w`.
+
+¿Algunos de estos comandos no funcionan correctamente? Tanto el comando man:locate[1] como man:whatis[1] dependen de una base de adtos que se reconstruye semanalmente. Si su máquina no está encendida durante el fin de semana (y ejecuta FreeBSD), es posible que desee ejecutar los comandos para el mantenimiento diario, semanal y mensual de vez en cuando. Ejecútelos como `root` y, por ahora, déle a cada uno el tiempo necesario para que termine antes de comenzar con el siguiente.
+
+[source,bash]
+....
+# periodic daily
+output omitted
+# periodic weekly
+output omitted
+# periodic monthly
+output omitted
+....
+
+Si está cansado de esperar, presione las teclas kbd:[Alt+F2] para abrir otra _consola virtual_ e inicie sesión nuevamente. Después de todo, es un sistema multiusuario y multitarea. Sin embargo, probablemente, estos comandos mostrarán mensajes en su pantalla mientras se ejecutan; puede escribir `clear` en el prompt para borrar la pantalla. Una vez se hayan ejecutado, es posible que desee ver el contenido de [.filename]#/var/mail/root# y [.filename]#/var/log/messages#.
+
+La ejecución de estos comandos forma parte de la administración del sistema--y como principal usuario de su sistema UNIX(TM), usted es su propio administrador. Prácticamente todo lo que necesitar hacer como `root` es administrar el sistema. Tales responsabilidades no están cubiertas muy bien, ni siquiera en esos libros enormes sobre UNIX(TM), los cuales parecen decir mucho espacio en bajar menús en los administradores de ventanas. Es posible que desee obtener uno de los dos principales libros sobre administración de sistemas, ya sea el UNIX System Administration Handbook (Prentice-Hall, 1995, ISBN 0-13-15051-7)--la segunda edición con la cubierta roja, de Evi Nemeth et.al.'s o el Essential System Administration (O'Reilly & Associates, 2002, ISBN 0-596-00343-9) de Æleen Frisch. Yo utilicé el libro de Nemeth.
+
+[[editing-text]]
+== Editando texto
+
+Para configurar su sistema, necesita editar archivos de texto. La mayoría estarán en el directorio [.filename]#/etc#; y necesitará utilizar el comando `su` para acceder como usuario `root` y así poder editarlos. Puede utiliazr un editor de texto simple, como `ee`, pero a largo plazo, se recomienda aprender a utilizar el editor de texto `vi`. Hay un excelente tutorial de vi en el directorio [.filename]#/usr/src/contrib/nvi/docs/tutorial#, si tiene el código fuente del sistema instalado.
+
+Antes de editar un archivo, se recomienda crear una copia de seguridad del mismo. Suponga que desea editar el archivo [.filename]#/etc/rc.conf#. Podría usar únicamente el comando `cd /etc` para acceder al directorio [.filename]#/etc# y utilizar el siguiente comando:
+
+[source,bash]
+....
+# cp rc.conf rc.conf.orig
+....
+
+Esto copiaría [.filename]#rc.conf# a [.filename]#rc.conf.orig#, y después usted podría copiar [.filename]#rc.conf.orig# a [.filename]#rc.conf# para recuperar el original. Pero sería todavía mejor mover (renombrar) y luego copiar de nuevo:
+
+[source,bash]
+....
+# mv rc.conf rc.conf.orig
+# cp rc.conf.orig rc.conf
+....
+
+because `mv` preserves the original date and owner of the file. You can now edit [.filename]#rc.conf#. If you want the original back, you would then `mv rc.conf rc.conf.myedit` (assuming you want to preserve your edited version) and then
+
+[source,bash]
+....
+# mv rc.conf.orig rc.conf
+....
+
+para dejar las cosas como estaban.
+
+Para editar un fichero, escriba
+
+[source,bash]
+....
+# vi filename
+....
+
+Desplacese por el texto con las teclas de desplazamiento. kbd:[Esc] (la tecla escape) pone a `vi` en modo comando. Aquí algunos comandos:
+
+`x`::
+borra la letra que se encuentre en la posición del cursor
+
+`dd`::
+elimina la línea entera (incluso si no aparece por completo en la pantalla)
+
+`i`::
+inserta texto en la posición del cursor
+
+`a`::
+inserta texto después del cursor
+
+Cuando escriba `i` o `a`, entonces podrá insertar texto. Si presiona la tecla `Esc`, le pondrá en modo comando, donde podrá insertar más comandos
+
+`:w`::
+para guardar los cambios en el disco y continuar con la edición
+
+`:wq`::
+para grabar y salir
+
+`:q!`::
+para salir sin grabar los cambios
+
+`/_text_`::
+para mover el cursor a la primera coincidencia de la palabra _text_; utilice la combinación `/` kbd:[Enter] (la tecla enter) para encontrar la siguiente coincidencia de la palabra _text_.
+
+`G`::
+para ir al final del archivo
+
+`__n__G`::
+para ir a la línea _n_ en el archivo, donde _n_ es un número
+
+kbd:[Ctrl+L]::
+para recargar la pantalla
+
+kbd:[Ctrl+b] y kbd:[Ctrl+f]::
+retrocede y avanza una pantalla, como los comandos `more` y `view`.
+
+Practique con el comando `vi` en su directorio personal creando un nuevo archivo con el comando `vi _filename_`, añadiendo y quitando texto, guardando el archivo y abriendolo de nuevo. El comando `vi` ofrece algunas sorpresas debido a su complejidad y, a veces, usted ejecutará inadvertidamente un comando que hará algo que no espera. (A algunas personas les gusta `vi`--es más poderoso que DOS EDIT--para saber más sobre el comando `:r`) Pulse la tecla kbd:[Esc] varias veces para asegurarse de estar en modo comando y proceda desde ese modo cuando tenga algun problema, guarde a menudo con `:w`, y utilice `:q!` para salir sin guardar y empezar de nuevo (desde su último `:w`) cuando lo necesite.
+
+Ahora puede utilizar el comando `cd` para ir a [.filename]#/etc#, utilizar el comando `su` para acceder como usuario `root`, use el comando `vi` para editar el archivo [.filename]#/etc/group#, y añada un usuario al grupo `wheel` para que el usuario tenga privilegios de root. Simplemente añada una coma y el nombre de usuario con el que inicia sesión al final de la primera línea del archivo, presione la tecla kbd:[Esc], y teclee `:wq` para guardar el archivo en disco y salir. Eficacia instantanea. (No puso un espacio después de la coma, ¿verdad?)
+
+[[other-useful-commands]]
+== Otros comandos útiles
+
+`df`::
+muestra el espacio en disco y los sistemas de archivos montados.
+
+`ps aux`::
+muestra los procesos que hay en ejecución. `ps ax` es la forma reducida.
+
+`rm _filename_`::
+remove _filename_.
+
+`rm -R _dir_`::
+elimina el directorio _dir_ y todos los subdirectorios--¡uselo con cuidado!
+
+`ls -R`::
+lista los archivos en el directorio actual; he utilizado una variante del comando, `ls -AFR > where.txt`, para obtener una lista de todos los archivos en el directorio [.filename]#/# y [.filename]#/usr# (por separado), hasta que encuentre una forma mejor de encontrar archivos.
+
+`passwd`::
+para cambiar la contraseña del usuario (o la contraseña del usuario `root`)
+
+`man hier`::
+muestra las páginas del manual para el sistema de archivos UNIX(TM) y su estructura jerárquica
+
+Utilice el comando `find` para buscar [.filename]#filename# en el directorio [.filename]#/usr# o en cualquier de sus subdirectorios con
+
+[source,bash]
+....
+% find /usr -name "filename"
+....
+
+Puede utilizar el carácter `*` como comodín en [parameter]#"_filename_"# (debe estar entrecomillado). Si utiliza el comando `find` para buscar en el directorio [.filename]#/# en lugar de [.filename]#/usr#, buscará en todos los sistemas de archivos montados, incluido el CDROM y la partición DOS.
+
+An excellent book that explains UNIX(TM) commands and utilities is Abrahams & Larson, Unix for the Impatient (2nd ed., Addison-Wesley, 1996). There is also a lot of UNIX(TM) information on the Internet.
+
+[[next-steps]]
+== Próximos pasos
+
+Ahora debería de tener las herramientas necesarias para moverse y editar archivos, de esta forma, podrá poner todo en funcionamiento. Hay una gran cantidad de información en el Handbook de FreeBSD (es muy probable que esté en su disco duro) y en el link:https://www.FreeBSD.org/[sitio web de FreeBSD]. También hay una gran variedad de paquetes y ports en el CDROM y en el sitio web. El Handbook le brinda información sobre cómo usarlos (obtenga el paquete, si existe, con el comando `pkg add _nombre-del-paquete_`, donde _nombre-del-paquete_ es el nombre del archivo del paquete). El CDROM dispone de un listado con los paquetes y ports con unas breves descripciones en la ruta [.filename]#cdrom/packages/index#, [.filename]#cdrom/packages/index.txt# y [.filename]#cdrom/ports/index#, con descripciones más completas en [.filename]#/cdrom/ports/*/*/pkg/DESCR# donde los caracteres `*` representan los subdirectorios de los tipos de programas y nombre de los programas respectivamente.
+
+Si encuentra el manual demasiado sofisticado (con el comando `lndir` y el resto) al instalar los ports desde el CDROM, esto es lo que normalmente funciona:
+
+Localice el port que desea, por ejemplo, `kermit`. Habrá un directorio para él en el CDROM. Copie el subdirectorio a [.filename]#/usr/local# (es un buen lugar para el software que instale y que deba estar disponible para todos los usuarios) con:
+
+[source,bash]
+....
+# cp -R /cdrom/ports/comm/kermit /usr/local
+....
+
+Esto debería producir el subdirectorio [.filename]#/usr/local/kermit# con todos los archivos que tenia el subdirectorio `kermit` en el CDROM.
+
+A continuación, cree el directorio [.filename]#/usr/ports/distfiles# si aún no existe usando el comando `mkdir`. Ahora busque en el directorio [.filename]#/cdrom/ports/distfiles# un archivo que tenga el nombre del port que desea. Copie ese archivo a [.filename]#/usr/ports/distfiles#; en las versiones más recientes, puede omitir este paso, FreeBSD lo hará por usted. En el caso de `kermit`, no existe el distfile.
+
+A continuación, utilice el comando `cd` para acceder al subdirectorio [.filename]#/usr/local/kermit#, el cual contieneel archivo [.filename]#Makefile#. Escriba
+
+[source,bash]
+....
+# make all install
+....
+
+Durante este proceso, el port utilizará el FTP para obtener los archivos comprimidos que necesita y que no encontró en el CDROM o en [.filename]#/usr/ports/distfiles#. Si su red aún no está configurada y no hay ningún archivo para el port en [.filename]#/cdrom/ports/distfiles#, tendrá que coger el distfile usando otro ordenador y copiarlo manualmente a [.filename]#/usr/ports/distfiles#. Lea el [.filename]#Makefile# (con `cat`, `more` o `view`) para averiguar dónde está el archivo y su nombre. (¡Utilice transferencias binarias de archivos!) A continuación, vuelva al directorio [.filename]#/usr/local/kermit#, busque el directorio que contenga el archivo [.filename]#Makefile# y ejecute el comando `make all install`.
+
+[[your-working-environment]]
+== Su entorno de trabajo
+
+Su shell es la parte más importante de su entorno de trabajo. La shell interpreta los comandos que escribe en la línea de comandos y, por lo tanto, se comunica con el resto del sistema operativo. También puede escribir shell scripts, los cuales consisten en una serie de comandos que se ejecutarán sin intervención.
+
+Dos shells vienen instaladas con FreeBSD: `csh` y `sh`. La shell `csh` es buena para los trabajos que se realizan en la línea de comandos, pero los scripts deben escribirse con `sh` (o `bash`). Puede averiguar qué shell tiene ejecutando el comando `echo $SHELL`.
+
+La shell `csh` está bien, pero la shell `tcsh` hace lo mismo que `csh` y mucho más. Permite obtener comandos usandos anteriormente con las teclas de flecha y editarlos. Permite utiliza la tabulación para completar el nombre de los archivos (la shell `csh` utiliza la tecla kbd:[Esc]), y le permite cambiar al directorio en el que estuvo por última vez con el comando `cd -`. También es mucho más sencillo configurar su prompt con la shell `tcsh`. La shell tcsh le hará la vida mucho más fácil.
+
+Aquí tiene los 3 pasos necesarios para instalar una nueva shell:
+
+[.procedure]
+. Instale la shell como un port o paquete, tal como lo haría con cualquier otro port o paquete.
+. Use el comando `chsh` para cambiar su shell a `tcsh` de forma permanente, o escriba `tcsh` en el prompt para cambiar su shell sin tener que iniciar sesión de nuevo.
+
+[NOTE]
+====
+En las primeras versiones de FreeBSD, y también en muchas otras versiones de UNIX(TM) puede ser peligroso cambiar la shell del usuario `root` a otra que no sea `sh` o `csh`; es posible que no tenga una shell funcional cuando el sistema entre en modo single user. La solución es usar el comando `su -m` para convertirse en el usuario `root`, que le dará acceso a la shell `tcsh` como `root`, porque la shell es parte del entorno. Puede hacer esto permanente añadiendolo a su archivo [.filename]#.tcshrc# como un alias, de la siguiente forma:
+
+[.programlisting]
+....
+alias su su -m
+....
+
+====
+
+Cuando se inicie `tcsh`, leerá los archivos [.filename]#/etc/csh.cshrc# y [.filename]#/etc/csh.login#, igual que `csh`. También leerá el archivo [.filename]#.login# de su directorio home, y también el archivo [.filename]#.cshrc#, a menos que tenga el archivo [.filename]#.tcshrc#. Puede hacerlo simplemente copiando el archivo [.filename]#.cshrc# a [.filename]#.tcshrc#.
+
+Ahora que ha instalado `tcsh`, puede configurar su prompt. Puede encontrar los detalles en la página del manual de `tcsh`, pero aquí tiene una línea que añadir en su archivo [.filename]#.tcshrc# que le dirá cuántos comandos ha escrito, qué hora es y en qué directorio se encuentra. También le indicará con el literal `>` si es un usuario normal y con el literal `#` si es el usuario `root`, aunque tsch lo hará siempre:
+
+set prompt = "%h %t %~ %# "
+
+Debería de ir en el mismo lugar que la línea del prompt actual, si existiera, o debajo de "if($?prompt) then" si no existiera. Comente la línea antigua; siempre podrá volver a usar el método antiguo si lo prefiere. No olvide los espacios y las comillas. Puede forzar la relectura del archivo [.filename]#.tcshrc# ejecutando `source .tcshrc`.
+
+Puede obtener un listado de las otras variables de entorno que han sido configuradas ejecutando `env` en el prompt. El resultado mostrará su editor predeterminado, paginador y tipo de terminal, entre muchas otras. Un comando útil si inicia sesión desde una ubicación remota y no puede ejecutar un programa porque el terminal no es capaz de hacerlo es `setenv TERM vt100`.
+
+[[other]]
+== Otros
+
+Como usuario `root`, puede desmontar el CDROM con el comando `/sbin/umount /cdrom`, sacarlo de la unidad, insertar otro y montarlo con el comando `/sbin/mount_cd9660 /dev/cd0a /cdrom`, asumiendo, claro, que  es el nombre del dispositivo para su unidad de CDROM. Las versiones más recientes de FreeBSD le permiten montar el CDROM con el comando `/sbin/mount /cdrom`.
+
+Utilizar el sistema de archivos live, el segundo disco de los CDROM de FreeBSD, es útil si tiene un espacio limitado. El contenido del sistema de archivos live varía de una versión a otra. Puede probar a jugar a los juegos que hay en el CDROM. Esto implica usar el comando `lndir`, el cual se instala junto al sistema de ventanas X (X Window System), para informar al resto de programas dónde encontrar los archivos necesarios, dado que se encuentran en [.filename]#/cdrom# en lugar de [.filename]#/usr# y sus subdirectorios, que es donde se espear que estén. Lea el manual del comando lndir ejecutando `man lndir`.
+
+[[comments-welcome]]
+== Comentarios Bienvenidos
+
+Si utiliza esta guía, me interesaría saber qué partes no han quedado del todo claras y qué echa en falta y piensa que debería incluirse, y si fue útil para usted. Gracias a Eugene W. Stark, profesor de ciencias de la computación en SUNY-Stony Brook y a John Fieber por sus útiles comentarios.
+
+Annelise Anderson, mailto:andrsn@andrsn.stanford.edu[andrsn@andrsn.stanford.edu]

@@ -1,0 +1,341 @@
+---
+title: Escribiendo una clase GEOM
+authors:
+  - author: Ivan Voras
+    email: ivoras@FreeBSD.org
+releaseinfo: "$FreeBSD$" 
+trademarks: ["freebsd", "intel", "general"]
+---
+
+= Escribiendo una clase GEOM
+:doctype: article
+:toc: macro
+:toclevels: 1
+:icons: font
+:sectnums:
+:sectnumlevels: 6
+:source-highlighter: rouge
+:experimental:
+
+include::shared/en/urls.adoc[]
+
+[.abstract-title]
+Resumen
+
+Este texto documenta algunos puntos de partida en el desarrollo de clases GEOM y módulos del kernel en general. Se asume que el lector está familiarizado con la programación en C.
+
+'''
+
+toc::[]
+
+[[intro]]
+== Introducción
+
+[[intro-docs]]
+=== Documentación
+
+La documentación sobre la programación del kernel es escasa -- es una de las pocas áreas donde casi no hay tutoriales amigables, y la frase, "¡usa el código fuente!", realmente es cierta. Sin embargo, hay algunos trozos (algunos de ellos muy desactualizados) flotando alrededor que deben estudiarse antes de comenzar a programar:
+
+* El link:{developers-handbook}[Manual del desarrollador de FreeBSD] -- parte del proyecto de documentación, no contiene nada específico sobre la programación del kernel, sino más bien información general de utilidad.
+* El link:{arch-handbook}[Manual de arquitectura de FreeBSD] -- también del proyecto de documentación, contiene descripciones de varios recursos y procedimientos de bajo nivel. El capítulo más importante es el 13, link:{arch-handbook}#driverbasics[Escribir controladores de dispositivos en FreeBSD].
+* La sección Blueprints del sitio web http://www.freebsddiary.org[FreeBSD Diary] -- contiene varios artículos interesantes sobre recursos del kernel.
+* Las páginas man en la sección 9 -- para documentación importante sobre las funciones del kernel.
+* La página man de man:geom[4] y http://phk.freebsd.dk/pubs/[las diapositivas GEOM de PHK] -- para la introducción general del subsistema GEOM.
+* Las páginas man de man:g_bio[9], man:g_event[9], man:g_data[9], man:g_geom[9], man:g_provider[9], man:g_consumer[9], man:g_access[9] y otras vinculadas a partir de ellas, para documentación sobre funcionalidades específicas.
+* La página man de man:style[9] -- para la documentación sobre las convenciones de estilo de codificación que se deben seguir para cualquier código con el que se haga commit en el árbol de FreeBSD.
+
+[[prelim]]
+== Preliminares
+
+La mejor forma de hacer el desarrollo del kernel es tener (al menos) dos ordenadores separados. Uno de ellos debería de tener el entorno de desarrollo y el código fuente, y el otro sería usado para probar el código recién escrito, inicializando a través de la red y montando su sistema de archivos desde el primer ordenador. De esta forma, si el nuevo código contiene errores y bloquea el ordenador, esto no dañará el código fuente (ni ningún otro dato que este ejecutándose en "caliente"). El segundo sistema ni siquiera necesita un monitor adecuado. En su lugar, podría estar conectado con un cable serie o KVM al primer ordenador.
+
+Pero, dado que no todo el mundo tiene dos o más ordenadores a mano, hay algunas cosas que se pueden hacer para preparar un sistema "live" para desarrollar el código del kernel. Esta configuración también es aplicable para el desarrollo en una máquina virtual http://www.vmware.com/[VMWare] o http://www.qemu.org/[QEMU] (la mejor opción después de un ordenador de desarrollo dedicado).
+
+[[prelim-system]]
+=== Modificar un sistema para el desarrollo
+
+Para cualquier programación del kernel, es obligatoria tener activada la opción `INVARIANTS`. Así que añada estas líneas a su archivo de configuración del kernel:
+
+[.programlisting]
+....
+options INVARIANT_SUPPORT
+options INVARIANTS
+....
+
+Para tener un mayor nivel de depuración, también debe incluir el soporte de WITNESS, que le advertirá sobre errores relacionados con los bloqueos:
+
+[.programlisting]
+....
+options WITNESS_SUPPORT
+options WITNESS
+....
+
+Para depurar los volcados de memoria, se necesita un kernel con símbolos de depuración:
+
+[.programlisting]
+....
+  makeoptions    DEBUG=-g
+....
+
+Con la forma habitual de instalar el kernel (`make installkernel`), el kernel de depuración no se instalará automáticamente. Se llama [.filename]#kernel.debug# y se encuentra en [.filename]#/usr/obj/usr/src/sys/KERNELNAME/#. Por convención, se debe copiar a [.filename]#/boot/kernel/#.
+
+Otra convención es habilitar la depuración del kernel para que pueda examinar el kernel panic cuando suceda. Para esto, introduzca las siguientes líneas en su archivo de configuración del kernel:
+
+[.programlisting]
+....
+options KDB
+options DDB
+options KDB_TRACE
+....
+
+Para que esto funcione, es posible que necesite establecer un sysctl (si no está activado de forma predeterminada):
+
+[.programlisting]
+....
+  debug.debugger_on_panic=1
+....
+
+Ocurrirán kernel panics, por lo que se debe tener cuidado con la cache del sistema de archivos. En particular, tener habilitadas las softupdates puede significar que la última versión del archivo podría perderse si se produce un kernel panic antes de que se haya hecho commit al almacenamiento. Deshabilitar las softupdates produce un gran impacto en el rendimiento, y no garantiza la consistencia de los datos. Para eso es necesario montar el sistema de archivos con la opción "sync". Como propuesta, los delays de la cache de softupdates pueden ser acortados. Hay tres sysctls que son útiles para esto (lo mejor es establecerlas en [.filename]#/etc/sysctl.conf#):
+
+[.programlisting]
+....
+kern.filedelay=5
+kern.dirdelay=4
+kern.metadelay=3
+....
+
+Los números representan segundos.
+
+Para depurar los kernel panics, los volcados del kernel son necesarios. Dado que un kernel panic podría inutilizar los sistemas de archivos, este volcado de memoria se graba primero en una partición sin formato (raw). Por lo general, esta es la partición swap. Esta partición debe ser al menos tan grande como la RAM física del ordenador. En el siguiente arranque, el volcado se copia en un archivo normal. Esto sucede después de que los sistemas de archivos se verifiquen y monten, y antes de habilitar la swap. Esto se controla con dos variables en [.filename]#/etc/rc.conf#:
+
+[.programlisting]
+....
+dumpdev="/dev/ad0s4b"
+dumpdir="/usr/core
+....
+
+La variable `dumpdev` especifica la partición de swap y `dumpdir` informa al sistema dónde se encuentra en el sistema de archivos para reubicar el volcado del kernel al reiniciar.
+
+Escribir volcados del kernel es lento y lleva mucho tiempo, por lo que si tiene mucha memoria (>256M) y muchos kernel panics, puede ser frustrante sentarse y esperar mientras se hace (dos veces -- primero escribirlo en el swap, luego reubicarlo al sistema de archivos). Es conveniente limitar la cantidad de RAM que utilizará el sistema a través de una variable en [.filename]#/boot/loader.conf#:
+
+[.programlisting]
+....
+  hw.physmem="256M"
+....
+
+Si los kernel panics son frecuentes y los sistemas de archivos son grandes (o simplemente no confía en softupdates + fsck en segundo plano), es aconsejable desactivar fsck en segundo plano mediante la siguiente variable en [.filename]#/etc/rc.conf#:
+
+[.programlisting]
+....
+  background_fsck="NO"
+....
+
+De esta forma, los sistemas de archivos siempre serán verificados cuando sea necesario. Tenga en cuenta que con fsck en segundo plano, podría producirse un nuevo kernel panic mientras comprueba los discos. Una vez más, la forma más segura es no tener muchos sistemas de archivos locales utilizando otro ordenador como servidor NFS.
+
+[[prelim-starting]]
+=== Empezando el proyecto
+
+Con el fin de crear una nueva clase GEOM, se debe crear un subdirectorio vacío bajo un directorio arbitrario que sea accesible por el usuario. No es necesario crear el directorio del módulo en [.filename]#/usr/src#.
+
+[[prelim-makefile]]
+=== El Makefile
+
+Es una buena práctica crear [.filename]##Makefile##s para cada proyecto de programación que no sea trivial, esto incluye obviamente módulos del kernel.
+
+Crear el archivo [.filename]#Makefile# es sencillo gracias a un extenso conjunto de rutinas de ayuda proporcionadas por el sistema. En resumen, aquí un ejemplo de cómo un archivo [.filename]#Makefile# con lo mínimo busca un módulo del kernel:
+
+[.programlisting]
+....
+SRCS=g_journal.c
+KMOD=geom_journal
+
+.include <bsd.kmod.mk>
+....
+
+Este [.filename]#Makefile# (con nombres de archivo modificados) funcionará para cualquier módulo del kernel, y una clase GEOM puede residir en un solo módulo del kernel. Si se necesita más de un archivo, enumérelo en la variable `SRCS`, separado con espacios en blanco de los otros nombres de archivos.
+
+[[kernelprog]]
+== Programación del kernel de FreeBSD
+
+[[kernelprog-memalloc]]
+=== Asignación de memoria
+
+Consulte man:malloc[9]. La asignación básica de memoria es solo ligeramente diferente de su equivalente a la del espacio de usuario. En particular, `malloc`() y `free`() aceptan parámetros adicionales como se describe en la página del manual.
+
+Un "malloc type" debe declararse en la sección de declaración del archivo del código fuente, de la siguiente forma:
+
+[.programlisting]
+....
+  static MALLOC_DEFINE(M_GJOURNAL, "gjournal data", "GEOM_JOURNAL Data");
+....
+
+Para usar esta macro, los headers [.filename]#sys/param.h#, [.filename]#sys/kernel.h# y [.filename]#sys/malloc.h# deben ser incluidos.
+
+Hay otro mecanismo para asignar memoria, el UMA (Universal Memory Allocator). Consulte man:uma[9] para obtener más información, pero es un tipo especial de asignador que se usa principalmente para la asignación rápida de listas que comprenden elementos del mismo tamaño (por ejemplo, arrays dinámicos de structs).
+
+[[kernelprog-lists]]
+=== Listas y colas
+
+Consulte man:queue[3]. Hay MUCHOS casos en los que se debe mantener una lista de cosas. Afortunadamente, esta estructura de datos está implementada (de varias formas) por las macros de C incluidas en el sistema. El tipo de lista más utilizado es TAILQ, porque es el más flexible. También es el que tiene mayores requisitos de memoria (sus elementos están doblemente vinculados) y también el más lento (aunque la variación de la velocidad es del orden de varias instrucciones de la CPU, por lo que no debe tomarse en serio).
+
+Si la velocidad de recuperación de datos es muy importante, consulte man:tree[3] y man:hashinit[9].
+
+[[kernelprog-bios]]
+=== BIOs
+
+La estructura `bio` se utiliza por todas y cada una de las operaciones de entrada/salida relacionadas con GEOM. Básicamente contiene información sobre qué dispositivo ('provider') se debe encargar de la solicitud, el tipo de solicitud, offset, longitud, pointer a un buffer y un grupo de indicadores y campos "específicos del usuario" que pueden ayudar a implementar varios hacks.
+
+Lo importante aquí es que las estructuras ``bio``s son tratados de forma asíncrona. Esto significa que, en la mayor parte del código, no hay un término análogo a las llamadas man:read[2] y man:write[2] que devuelvan un valor hasta que se realiza una solicitud. En su lugar, se llama a una función proporcionada por el desarrollador que actúa como una notificación cuando la solicitud se completa (o se produce un error).
+
+El modelo de programación asíncrona (también llamado "orientado a eventos") es un poco más difícil que el imperativo, mucho más usado en el espacio de usuario (lleva un tiempo acostumbrarse). En algunos casos, se pueden utilizar las rutinas auxiliares `g_write_data`() y `g_read_data`(), pero _no siempre_. En particular, no se pueden utilizar cuando se mantiene un mutex; por ejemplo, el GEOM topology mutex o el mutex interno mantenido durante las funciones `.start`() y `.stop`().
+
+[[geom]]
+== Programación GEOM
+
+[[geom-ggate]]
+=== Ggate
+
+Si no se necesita el máximo rendimiento, una forma mucho más sencilla de realizar una transformación de datos es implementarla en el espacio de usuario a través de la función ggate (GEOM gate). Desafortunadamente, no hay una manera fácil de convertir o incluso compartir código entre las dos aproximaciones.
+
+[[geom-class]]
+=== Clase GEOM
+
+Las clases GEOM son transformaciones en los datos. Estas transformaciones se pueden combinar en forma de árbol. Las instancias de las clases GEOM se denominan _geoms_.
+
+Cada clase GEOM tiene varios "métodos de clase" a los que se llama cuando no hay una instancia geom disponible (o simplemente no están vinculados a una sola instancia):
+
+* Se llama a `.init` cuando GEOM se percata de una clase GEOM (cuando se carga el módulo del kernel)
+* Se llama a `.fini` cuando GEOM abandona la clase (cuando el módulo se descarga)
+* A continuación se llama a `.taste`, una vez por cada proveedor que el sistema tenga disponible. Si corresponde, esta función generalmente creará e iniciará una instancia geom
+* Se llama a `.destroy_geom` cuando geom debe ser destruido
+* Se llama a `.ctlconf` cuando el usuario solicita la reconfiguración del geom existente
+
+También se definen las funciones de eventos GEOM, que se copiarán en la instancia de geom.
+
+El campo `.geom` en la estructura `g_class` es un LIST de geoms instanciados de la clase.
+
+Estas funciones son llamadas desde el thread del kernel g_event.
+
+[[geom-softc]]
+=== Softc
+
+El nombre "softc" es un término legado para "driver private data". El nombre probablemente proviene del término arcaico "software control block". En GEOM, es una estructura (para ser más precisos: un pointer a una estructura) que se puede adjuntar a una instancia de geom para mantener cualquier información que sea privada para la instancia de geom. La mayoría de las clases de GEOM tienen los siguientes elementos:
+
+* `struct g_provider *provider` : el "provider" de esta instancia GEOM
+* `uint16_t n_disks` : número de consumidores que usa GEOM
+* `struct g_consumer \**disks` : array de `struct g_consumer*`. (No es posible usar solo direccionamiento indirecto porque struct g_consumer* ha sido creado en nuestro nombre por GEOM).
+
+La estructura `softc` contiene todo el estado de la instancia geom. Cada instancia de geom tiene su propio softc.
+
+[[geom-metadata]]
+=== Metadata
+
+El formato de los metadatos es más o menos dependiente de la clase, pero DEBE comenzar por:
+
+* Un buffer de 16 bytes para la firma terminado en null (normalmente el nombre de la clase).
+* ID de la versión del tipo uint32
+
+Se supone que las clases de geom saben cómo manejar los metadatos con ID de versión menores que los suyos.
+
+Los metadatos se encuentran en el último sector del provider (y, por lo tanto, deben encajar en él).
+
+Todo depende de la implementación, pero todo el código existente funciona así, y es compatible con las bibliotecas.
+
+[[geom-creating]]
+=== Etiquetar/crear un GEOM
+
+La secuencia de eventos es:
+
+* el usuario llama a la utilidad man:geom[8] (o uno de sus equivalentes hardlinked)
+* la utilidad determina qué clase geom se supone que debe manejar y busca la biblioteca [.filename]#geom_CLASSNAME.so# (normalmente en [.filename]#/lib/geom#)
+* man:dlopen[3]-s abre la biblioteca, extrae la definición de los parámetros de la línea de comandos y funciones auxiliares
+
+En el caso de crear/etiquetar un nuevo geom, esto es lo que sucede:
+
+* man:geom[8] busca en el argumento de la línea de comandos el comando (generalmente `label`), y llama a una función auxiliar
+* La función auxiliar comprueba los parámetros y recopila los metadatos, que procede a escribir a todos los providers interesados
+* Esto "estropea" los geoms existentes (si existen) e inicia una nueva ronda de "cata" de los providers. La clase geom deseada reconoce los metadatos y carga la clase geom
+
+(La secuencia de eventos anterior depende de la implementación, pero todo el código existente funciona así, y es compatible con las bibliotecas).
+
+[[geom-command]]
+=== Estructura del comando GEOM
+
+La biblioteca auxiliar [.filename]#geom_CLASSNAME.so# exporta la estructura `class_commands`, que es un array de elementos `struct g_command`. Los comandos son de formato uniforme y se muestran de la siguiente forma:
+
+[.programlisting]
+....
+  verb [-options] geomname [other]
+....
+
+Los verbos comunes son:
+
+* label -- para escribir metadatos en los dispositivos para que puedan ser reconocidos en la cata y creados en geoms
+* destroy -- para destruir los metadatos, así se destruyen los geoms.
+
+Las opciones comunes son:
+
+* `-v` : be verbose
+* `-f` : force
+
+Muchas acciones, como etiquetar y destruir metadatos, se pueden ejecutar en el espacio de usuario, Para ello, `struct g_command` proporciona el campo `gc_func` que se puede establecer en una función (en el mismo [.filename]#.so#) que se llamará para procesar un verbo. Si `gc_func` es NULL, el comando se pasará al módulo del kernel, a la función `.ctlreq` de la clase geom.
+
+[[geom-geoms]]
+=== Geoms
+
+Los Geoms son instancias de clases GEOM. Tienen datos internos (una estructura softc) y algunas funciones con las que responden a eventos externos.
+
+Las funciones del evento son:
+
+* `.access` : calcula permisos (lectura/escritura/exclusivo)
+* `.dumpconf` : devuelve información en formato XML sobre el geom
+* `.orphan` : se llama cuando algún provider subyacente se desconecta
+* `.spoiled` : se llama cuando se registra algún provider subyacente
+* `.start` : maneja la E/S
+
+Estas funciones se llaman desde el thread `g_down` del kernel y no puede haber inactividad en este contexto, (vea la definición de inactividad en otra parte) lo que limita un poco lo que se puede hacer, pero obliga a que el manejo sea rápido.
+
+De estas funciones, la más importante para realizar un trabajo útil real es la función `.start`(), que se llama cuando una solicitud BIO llega a un provider administrado por una instancia de la clase geom.
+
+[[geom-threads]]
+=== Threads GEOM
+
+Hay tres threads del kernel creados y ejecutados por el framework GEOM:
+
+* `g_down` : maneja solicitudes provenientes de entidades de alto nivel (como una solicitud de usuario) en el camino a dispositivos físicos
+* `g_up` : maneja las respuestas de los controladores de dispositivos a las solicitudes realizadas por entidades de nivel superior
+* `g_event` : maneja el resto de casos: creación de instancias geom, conteo de accesos, eventos "spoil", etc
+
+Cuando un proceso de usuario emite un pedido de " lee los datos X en el offset Y de un archivo", esto es lo que sucede:
+
+* El sistema de archivos convierte la solicitud en una instancia de struct bio y lo transmite al subsistema GEOM. Sabe qué instancia geom debería manejarlo porque los sistemas de archivos se alojan directamente en una instancia geom
+* La solicitud termina como una llamada a la función `.start`() realizada en el thread g_down y llega a la instancia de geom de nivel superior
+* Esta instancia geom de nivel superior (por ejemplo, el slicer de particiones) determina que la solicitud debe enrutarse a una instancia de nivel inferior (por ejemplo, el controlador de disco). Se realiza una copia de la solicitud bio (¡las solicitudes bio _SIEMPRE_ se deben copiar entre instancias, con la función `g_clone_bio`()!), modifica los campos de datos offset y los campos del provider de destino y se ejecuta la copia con `g_io_request`()
+* El controlador de disco obtiene la solicitud bio también como una llamada a `.start`() en el thread `g_down`. Habla con el hardware, recupera los datos y llama a `g_io_deliver`() en la bio
+* Ahora, la notificación de bio "burbujea" en el thread `g_up`. Primero, el slicer de paticiones obtiene `.done`() llamando al thread `g_up`, utiliza la información almacenada en la bio para liberar la estructura `bio` clonada (con `g_destroy_bio`()) y llama a `g_io_deliver`() en la solicitud original
+* El sistema de archivos obtiene los datos y los transfiere al espacio de usuario
+
+Consulte la página del manual man:g_bio[9] para obtener información sobre cómo se transfieren los datos en la estructura `bio` (en particular, tenga en cuenta los campos `bio_parent` y `bio_children` y cómo se manejan).
+
+Una característica importante es: _NO SE PUEDE DORMIR (SLEEPING) EN LOS THREADS G_UP Y G_DOWN_. Esto significa que no se puede hacer nada de lo siguiente en esos threads (la lista, por supuesto, no está completa, es solo informativa):
+
+* Las llamadas a `msleep`() y `tsleep`(), obviamente
+* Las llamadas a `g_write_data`() y `g_read_data`(), porque producen sleep al pasar datos al consumidor y regresar
+* Esperar E/S
+* Las llamadas a man:malloc[9] y `uma_zalloc`() con el flag `M_WAITOK` activo
+* sx y otros sleepable locks
+
+Esta restricción está aquí para impedir que el código GEOM obstruya la ruta de las solicitudes de E/S, ya que el sleeping no tiene limite de tiempo y puede no haber garantías sobre cuánto tiempo tardará (también hay algunas otras razones más técnicas). También significa que no hay mucho que se pueda hacer en estos threads; por ejemplo, prácticamente cualquier cosa compleja requiere asignación de memoria. Afortunadamente, hay una salida: crear threads adicionales en el kernel.
+
+[[geom-kernelthreads]]
+=== Threads del kernel para usar en el código GEOM
+
+Los threads del kernel se crean con la función man:kthread_create[9], y son similares en el comportamiento a los threads del espacio de usuario, solo que no pueden regresar a quien los ha llamado para indicar que han terminado, debe llamar a man:kthread_exit[9].
+
+En el código GEOM, el uso habitual de los threads es para descargar el procesamiento de peticiones del thread `g_down` (la función `.start`()). Estos threads parecen "event handlers": tienen vinculada una lista de eventos asociados a ellos (en los cuales los eventos pueden publicarse mediante varias funciones en varios threads, por lo que deben estar protegidos por un mutex), toma los eventos de la lista, uno por uno, y los procesa en una gran instrucción `switch`().
+
+La principal ventaja de utilizar un thread para manejar las solicitudes de E/S es que pueden dormir (sleep) cuando sea necesario. Ahora, esto suena bien, pero se debe pensar cuidadosamente. Dormir(sleeping) es bueno y muy conveniente, pero puede ser muy efectivo destruyendo el rendimiento de la transformación de geom. Las clases extremadamente sensibles al rendimiento probablemente deberían de hacer todo el trabajo en la llamada a la función `.start`(), teniendo mucho cuidado de manejar los errores de falta de memoria y similares.
+
+El otro beneficio de tener un thread que controle eventos como ese es la de serializar todas las peticiones y respuestas que vienen de diferentes threads de geom en un solo thread. Esto es muy conveniente, pero puede ser lento. En la mayoría de los casos, el manejo de peticiones de `.done`() se puede dejar para el thread `g_up`.
+
+Los mutexes en el kernel de FreeBSD (vea man:mutex[9]) tienen una distinción de sus primos más comunes en el espacio de usuario -- el código no puede dormir (sleep) mientras mantiene un mutex. Si el código necesita dormir (sleep) mucho, los bloqueos man:sx[9] pueden ser más apropiados. Por otro lado, si hace casi todo en un solo thread, puede no necesitar usar mutexes.

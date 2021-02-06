@@ -1,0 +1,355 @@
+---
+title: Proceso de generación de releases en FreeBSD
+authors:
+  - author: Murray Stokely
+    email: murray@FreeBSD.org
+    webpage: https://people.FreeBSD.org/~murray/
+trademarks: ["freebsd", "intel", "general"]
+---
+
+= Proceso de generación de releases en FreeBSD
+:doctype: article
+:toc: macro
+:toclevels: 1
+:icons: font
+:sectnums:
+:sectnumlevels: 6
+:source-highlighter: rouge
+:experimental:
+:xrefstyle: full
+
+include::shared/releases.adoc[]
+include::shared/authors.adoc[]
+include::shared/es/teams.adoc[lines=16..-1]
+include::shared/es/mailing-lists.adoc[]
+include::shared/es/urls.adoc[]
+
+ifeval::["{backend}" == "html5"]
+:imagesdir: ../../../images/articles/releng/
+endif::[]
+
+ifeval::["{backend}" == "pdf"]
+:imagesdir: ../../../../static/images/articles/releng/
+endif::[]
+
+ifeval::["{backend}" == "epub3"]
+:imagesdir: ../../../../static/images/articles/releng/
+endif::[]
+
+[.abstract-title]
+Resumen
+
+[NOTE]
+====
+Este documento está desactualizado y no describe con precisión los procedimientos de lanzamientos actuales del equipo FreeBSD Release Engineering. Se conserva para fines históricos. Los procedimientos actuales utilizados por el equipo FreeBSD Release Engineering están disponibles en el artículo link:{freebsd-releng}[FreeBSD Release Engineering].
+====
+
+Este artículo describe la aproximación utilizada por el equipo de ingeniería de productos de FreeBSD para generar releases de calidad y listas para utilizar en entornos de producción. Se detalla la metodología utilizada para generar la release oficial de FreeBSD y se describen las herramientas disponibles para aquellas personas interesadas en generar sus propias releases a medida de sus necesidades, en particular para demostraciones de empresa o para comercializar el producto.
+
+'''
+
+toc::[]
+
+[[introduction]]
+== Introducción
+
+The development of FreeBSD is a very open process. FreeBSD is comprised of contributions from thousands of people around the world. The FreeBSD Project provides Subversion  access to the general public so that others can have access to log messages, diffs (patches) between development branches, and other productivity enhancements that formal source code management provides. This has been a huge help in attracting more talented developers to FreeBSD. However, I think everyone would agree that chaos would soon manifest if write access to the main repository was opened up to everyone on the Internet. Therefore only a "select" group of nearly 300 people are given write access to the Subversion repository. These link:{contributors}#staff-committers[committers] are usually the people who do the bulk of FreeBSD development. An elected link:https://www.FreeBSD.org/administration/#t-core[Core Team] of developers provide some level of direction over the project.
+
+El rápido ritmo de desarrollo de `FreeBSD` hace que la principal rama de desarrollo sea inadecuada para el uso diario del público en general. En particular, se requieren esfuerzos de estabilización para pulir el sistema de desarrollo en una versión de calidad de producción. Para resolver este conflicto, el desarrollo continúa en varias vías paralelas. La principal rama de desarrollo es la _HEAD_ o _tronco_ de nuestro árbol de Subversión, conocido como "FreeBSD-CURRENT" o "-CURRENT" para abreviar.
+
+Se mantiene un conjunto de ramas más estables, conocidas como "FreeBSD-STABLE" o "-STABLE" para abreviar. Todas las ramas viven en un repositorio maestro de Subversion mantenido por el Proyecto FreeBSD. FreeBSD-CURRENT es el "punto de inflexión" del desarrollo de FreeBSD donde todos los nuevos cambios entran primero en el sistema. FreeBSD-STABLE es la rama de desarrollo a partir de la cual se hacen las principales versiones. Los cambios entran en esta rama a un ritmo diferente, y con la suposición general de que primero han entrado en FreeBSD-CURRENT y han sido probados a fondo por nuestra comunidad de usuarios.
+
+El término _estable_ en el nombre de la rama se refiere a la presunta estabilidad de la interfaz binaria de la aplicación, que se garantiza en el proyecto. Esto significa que una aplicación de usuario compilada en una versión antigua del sistema de la misma rama funciona en un sistema más nuevo de la misma rama. La estabilidad de la ABI ha mejorado mucho en comparación con las versiones anteriores. En la mayoría de los casos, los binarios de los sistemas _STABLE_ más antiguos funcionan sin modificaciones en los sistemas más nuevos, incluido _HEAD_, suponiendo que no se utilizan las interfaces de gestión del sistema.
+
+In the interim period between releases, weekly snapshots are built automatically by the FreeBSD Project build machines and made available for download from `ftp://ftp.FreeBSD.org/pub/FreeBSD/snapshots/`. The widespread availability of binary release snapshots, and the tendency of our user community to keep up with -STABLE development with Subversion and "`make buildworld`" helps to keep FreeBSD-STABLE in a very reliable condition even before the quality assurance activities ramp up pending a major release.
+
+Además de las instantáneas ISO de instalación, también se proporcionan imágenes semanales de máquinas virtuales para su uso con VirtualBox, qemu u otro software de emulación popular. Las imágenes de la máquina virtual pueden ser descargadas desde `ftp://ftp.FreeBSD.org/pub/FreeBSD/snapshots/VM-IMAGES/`.
+
+Las imágenes de la máquina virtual son de aproximadamente 150MB man:xz[1] comprimidos, y contienen un sistema de archivos dispersos de 10GB cuando se adjuntan a una máquina virtual.
+
+Bug reports and feature requests are continuously submitted by users throughout the release cycle. Problems reports are entered into our Bugzilla database through the web interface provided at https://www.freebsd.org/support/bugreports/[https://www.freebsd.org/support/bugreports.html].
+
+To service our most conservative users, individual release branches were introduced with FreeBSD 4.3. These release branches are created shortly before a final release is made. After the release goes out, only the most critical security fixes and additions are merged onto the release branch. In addition to source updates via Subversion, binary patchkits are available to keep systems on the _releng/X.Y_ branches updated.
+
+=== Lo que describe este artículo
+
+Las siguientes secciones de este artículo describen:
+
+<<release-proc>>::
+Las diferentes fases del proceso de ingeniería de liberación que conducen a la construcción del sistema real.
+
+<<release-build>>::
+El proceso de construcción actual.
+
+<<extensibility>>::
+Cómo la liberación de la base puede ser extendida por terceros.
+
+<<lessons-learned>>::
+Algunas de las lecciones aprendidas a través del lanzamiento de FreeBSD 4.4.
+
+<<future>>::
+Las futuras direcciones de desarrollo.
+
+
+[[release-proc]]
+== Proceso de liberación
+
+Los nuevos lanzamientos de FreeBSD son liberados de la rama -STABLE en intervalos de aproximadamente cuatro meses. El proceso de liberación de FreeBSD comienza a acelerarse 70-80 días antes de la fecha prevista de liberación cuando el ingeniero de liberación envía un correo electrónico a las listas de correo de desarrollo para recordar a los desarrolladores que sólo tienen 15 días para integrar los nuevos cambios antes de que el código se congele. Durante este tiempo, muchos desarrolladores realizan lo que se conoce como "MFC sweeps".
+
+MFC significa "Merge From CURRENT" y describe el proceso de fusión de un cambio probado de nuestra rama de desarrollo actual a nuestra rama estable. La política del proyecto requiere que cualquier cambio se aplique primero al tronco, y se fusione a las ramas -STABLE después de que los usuarios de -CURRENT hayan realizado suficientes pruebas externas (se espera que los desarrolladores prueben ampliamente el cambio antes de comprometerse con -CURRENT, pero es imposible que una persona ejerza todos los usos del sistema operativo de propósito general). El período mínimo de MFC es de 3 días, que normalmente se utiliza sólo para correcciones de errores triviales o críticos.
+
+=== Revisión del código
+
+Sesenta días antes de la liberación anticipada, el repositorio de fuentes entra en un "congelamiento de código". Durante este tiempo, todas las confirmaciones de la rama -STABLE deben ser aprobadas por el Equipo de Ingeniería de Liberación mailto:re@FreeBSD.org[re@FreeBSD.org]. El proceso de aprobación es técnicamente reforzado por un gancho de pre-commit. Los tipos de cambios que se permiten durante este período incluyen:
+
+* Arreglos de errores.
+* Actualizaciones de la documentación.
+* Arreglos de seguridad de cualquier tipo.
+* Cambios menores en los controladores de los dispositivos, como la adición de nuevas identificaciones de dispositivos.
+* Actualizaciones de los controladores de los fabricantes.
+* Cualquier cambio adicional que el equipo de ingeniería de lanzamiento considere justificado, dado el riesgo potencial.
+
+Poco después de que se inicia la congelación del código, se construye una imagen _BETA1_ y se libera para su prueba generalizada. Durante la congelación de código, al menos una imagen beta o candidata a ser liberada cada dos semanas hasta que la liberación final esté lista. Durante los días anteriores a la liberación final, el equipo de ingeniería de liberación está en constante comunicación con el equipo de seguridad, los encargados de la documentación y los encargados de los puertos para asegurar que todos los diferentes componentes requeridos para una liberación exitosa estén disponibles.
+
+After the quality of the BETA images is satisfying enough, and no large and potentially risky changes are planned, the release branch is created and _Release Candidate_ (RC) images are built from the release branch, instead of the BETA images from the STABLE branch. Also, the freeze on the STABLE branch is lifted and release branch enters a "hard code freeze" where it becomes much harder to justify new changes to the system unless a serious bug-fix or security issue is involved.
+
+=== Lista de control de liberación final
+
+Cuando varias imágenes BETA han sido puestas a disposición para ser probadas ampliamente y todos los problemas importantes han sido resueltos, el "pulido" de la versión final puede comenzar.
+
+[[rel-branch]]
+==== Creación de la rama de liberación
+
+[NOTE]
+====
+In all examples below, `$FSVN` refers to the location of the FreeBSD Subversion repository, `svn+ssh://svn.FreeBSD.org/base/`.
+====
+
+The layout of FreeBSD branches in Subversion is described in the link:{committers-guide}#subversion-primer-base-layout[Committer's Guide]. The first step in creating a branch is to identify the revision of the `stable/_X_` sources that you want to branch _from_.
+
+[source,bash]
+....
+# svn log -v $FSVN/stable/9
+....
+
+El siguiente paso es crear la _rama de liberación_
+
+[source,bash]
+....
+# svn cp $FSVN/stable/9@REVISION $FSVN/releng/9.2
+....
+
+Esta rama puede ser revisada:
+
+[source,bash]
+....
+# svn co $FSVN/releng/9.2 src
+....
+
+[NOTE]
+====
+Creating the `releng` branch and `release` tags is done by the link:https://www.FreeBSD.org/administration/#t-re[Release Engineering Team].
+====
+
+image::branches-head.png[Rama de desarrollo de FreeBSD]
+
+image::branches-releng3.png[FreeBSD 3.x STABLE Branch]
+
+image::branches-releng4.png[FreeBSD 4.x STABLE Branch]
+
+image::branches-releng5.png[FreeBSD 5.x STABLE Branch]
+
+image::branches-releng6.png[FreeBSD 6.x STABLE Branch]
+
+image::branches-releng7.png[FreeBSD 7.x STABLE Branch]
+
+image::branches-releng8.png[FreeBSD 8.x STABLE Branch]
+
+image::branches-releng9.png[FreeBSD 9.x STABLE Branch]
+
+[[versionbump]]
+==== Aumentar el número de versión
+
+Antes de que la versión final pueda ser etiquetada, construida y liberada, los siguientes archivos deben ser modificados para reflejar la versión correcta de FreeBSD:
+
+* [.filename]#doc/en_US.ISO8859-1/books/handbook/mirrors/chapter.xml#
+* [.filename]#doc/en_US.ISO8859-1/books/porters-handbook/book.xml#
+* [.filename]#doc/en_US.ISO8859-1/htdocs/cgi/ports.cgi#
+* [.filename]#ports/Tools/scripts/release/config#
+* [.filename]#doc/share/xml/freebsd.ent#
+* [.filename]#src/Makefile.inc1#
+* [.filename]#src/UPDATING#
+* [.filename]#src/gnu/usr.bin/groff/tmac/mdoc.local#
+* [.filename]#src/release/Makefile#
+* [.filename]#src/release/doc/en_US.ISO8859-1/share/xml/release.dsl#
+* [.filename]#src/release/doc/share/examples/Makefile.relnotesng#
+* [.filename]#src/release/doc/share/xml/release.ent#
+* [.filename]#src/sys/conf/newvers.sh#
+* [.filename]#src/sys/sys/param.h#
+* [.filename]#src/usr.sbin/pkg_install/add/main.c#
+* [.filename]#doc/en_US.ISO8859-1/htdocs/search/opensearch/man.xml#
+
+Las notas de lanzamiento y los archivos de erratas también deben ajustarse a la nueva versión (en la rama de lanzamiento) y truncarse adecuadamente (en la rama estable/actual):
+
+* [.filename]#src/release/doc/en_US.ISO8859-1/relnotes/common/new.xml#
+* [.filename]#src/release/doc/en_US.ISO8859-1/errata/article.xml#
+
+Sysinstall should be updated to note the number of available ports and the amount of disk space required for the Ports Collection.  This information is currently kept in [.filename]#src/usr.sbin/bsdinstall/dist.c#.
+
+After the release has been built, a number of files should be updated to announce the release to the world. These files are relative to `head/` within the `doc/` subversion tree.
+
+* [.filename]#share/images/articles/releng/branches-relengX.pic#
+* [.filename]#head/share/xml/release.ent#
+* [.filename]#en_US.ISO8859-1/htdocs/releases/*#
+* [.filename]#en_US.ISO8859-1/htdocs/releng/index.xml#
+* [.filename]#share/xml/news.xml#
+
+Additionally, update the "BSD Family Tree" file:
+
+* [.filename]#src/share/misc/bsd-family-tree#
+
+==== Creación de la etiqueta de liberación
+
+Cuando la versión final esté lista, el siguiente comando creará la etiqueta `release/9.2.0`.
+
+[source,bash]
+....
+# svn cp $FSVN/releng/9.2 $FSVN/release/9.2.0
+....
+
+Los gestores de Documentación y Puertos son responsables de etiquetar sus respectivos árboles con la etiqueta `tags/RELEASE_9_2_0`.
+
+When the Subversion `svn cp` command is used to create a _release tag_, this identifies the source at a specific point in time. By creating tags, we ensure that future release builders will always be able to use the exact same source we used to create the official FreeBSD Project releases.
+
+[[release-build]]
+== Release Building
+
+FreeBSD "releases" can be built by anyone with a fast machine and access to a source repository. (That should be everyone, since we offer Subversion access! See the link:{handbook}#svn/[Subversion section in the Handbook] for details.) The _only_ special requirement is that the man:md[4] device must be available. If the device is not loaded into your kernel, then the kernel module should be automatically loaded when man:mdconfig[8] is executed during the boot media creation phase. All of the tools necessary to build a release are available from the Subversion repository in [.filename]#src/release#. These tools aim to provide a consistent way to build FreeBSD releases. A complete release can actually be built with only a single command, including the creation of ISO images suitable for burning to CDROM or DVD, and an FTP install directory. man:release[7] fully documents the `src/release/generate-release.sh` script which is used to build a release. `generate-release.sh` is a wrapper around the Makefile target: `make release`.
+
+=== Building a Release
+
+man:release[7] documents the exact commands required to build a FreeBSD release. The following sequences of commands can build an 9.2.0 release:
+
+[source,bash]
+....
+# cd /usr/src/release
+# sh generate-release.sh release/9.2.0 /local3/release
+....
+
+Después de ejecutar estos comandos, todos los archivos de liberación preparados están disponibles en el directorio [.filename]#/local3/release/R#.
+
+La liberación [.filename]#Makefile# puede ser dividida en varios pasos distintos.
+
+* Creation of a sanitized system environment in a separate directory hierarchy with "`make installworld`".
+* Comprobación de la Subversión de una versión limpia de la fuente del sistema, la documentación y los puertos en la jerarquía de construcción de la liberación.
+* Population of [.filename]#/etc# and [.filename]#/dev# in the chrooted environment.
+* chroot into the release build hierarchy, to make it harder for the outside environment to taint this build.
+* `make world` in the chrooted environment.
+* Construcción de binarios relacionados con Kerberos.
+* Construir el núcleo [.filename]#GENERIC#.
+* Creación de un árbol de directorios de etapas donde se construirán y empaquetarán las distribuciones binarias.
+* Construcción e instalación de la cadena de herramientas de documentación necesaria para convertir la fuente de documentación (SGML) en documentos HTML y de texto que acompañarán a la liberación.
+* La elaboración e instalación de la documentación real (manuales de usuario, tutoriales, notas de lanzamiento, listas de compatibilidad de hardware, etc.)
+* Empaquetar las bases de distribución de los binarios y las fuentes.
+* Crear una jerarquía de instalación de FTP.
+* _(opcionalmente)_ Crear imágenes ISO para medios CDROM/DVD.
+
+Para más información sobre la infraestructura de construcción de la versión, por favor vea la man:realse[7].
+
+[NOTE]
+====
+It is important to remove any site-specific settings from [.filename]#/etc/make.conf#. For example, it would be unwise to distribute binaries that were built on a system with `CPUTYPE` set to a specific processor.
+====
+
+=== Contributed Software ("ports")
+
+La colección https://www.FreeBSD.org/ports[Ports de FreeBSD] es una colección de más de 24.000 paquetes de software de terceros disponibles para FreeBSD. El Equipo de Administración de Ports mailto:portmgr@FreeBSD.org[portmgr@FreeBSD.org] es responsable de mantener un árbol de ports consistente que puede ser usado para crear los paquetes binarios que acompañan a las versiones oficiales de FreeBSD.
+
+=== Lanzamiento de las ISO
+
+Starting with FreeBSD 4.4, the FreeBSD Project decided to release all four ISO images that were previously sold on the _BSDi/Wind River Systems/FreeBSD Mall_"official" CDROM distributions. Each of the four discs must contain a [.filename]#README.TXT# file that explains the contents of the disc, a [.filename]#CDROM.INF# file that provides meta-data for the disc so that man:bsdinstall[8] can validate and use the contents, and a [.filename]#filename.txt# file that provides a manifest for the disc. This _manifest_ can be created with a simple command:
+
+[source,bash]
+....
+/stage/cdrom# find . -type f | sed -e 's/^\.\///' | sort > filename.txt
+....
+
+A continuación se exponen los requisitos específicos de cada disco compacto(CD).
+
+==== Disco 1
+
+The first disc is almost completely created by `make release`. The only changes that should be made to the [.filename]#disc1# directory are the addition of a [.filename]#tools# directory, and as many popular third party software packages as will fit on the disc. The [.filename]#tools# directory contains software that allow users to create installation floppies from other operating systems. This disc should be made bootable so that users of modern PCs do not need to create installation floppy disks.
+
+If a custom kernel of FreeBSD is to be included, then man:bsdinstall[8] and man:release[7] must be updated to include installation instructions. The relevant code is contained in [.filename]#src/release# and [.filename]#src/usr.sbin/bsdinstall#. Specifically, the file [.filename]#src/release/Makefile#, and [.filename]#dist.c#, [.filename]#dist.h#, [.filename]#menus.c#, [.filename]#install.c#, and [.filename]#Makefile# will need to be updated under [.filename]#src/usr.sbin/bsdinstall#. Optionally, you may choose to update [.filename]#bsdinstall.8#.
+
+==== Disco 2
+
+The second disc is also largely created by `make release`. This disc contains a "live filesystem" that can be used from man:bsdinstall[8] to troubleshoot a FreeBSD installation. This disc should be bootable and should also contain a compressed copy of the CVS repository in the [.filename]#CVSROOT# directory and commercial software demos in the [.filename]#commerce# directory.
+
+==== Soporte de múltiples volúmenes
+
+Sysinstall supports multiple volume package installations. This requires that each disc have an [.filename]#INDEX# file containing all of the packages on all volumes of a set, along with an extra field that indicates which volume that particular package is on. Each volume in the set must also have the `CD_VOLUME` variable set in the [.filename]#cdrom.inf# file so that bsdinstall can tell which volume is which. When a user attempts to install a package that is not on the current disc, bsdinstall will prompt the user to insert the appropriate one.
+
+[[distribution]]
+== Distribución
+
+[[dist-ftp]]
+=== Sitios FTP
+
+When the release has been thoroughly tested and packaged for distribution, the master FTP site must be updated. The official FreeBSD public FTP sites are all mirrors of a master server that is open only to other FTP sites. This site is known as `ftp-master`. When the release is ready, the following files must be modified on `ftp-master`:
+
+[.filename]#/pub/FreeBSD/releases/arch/X.Y-RELEASE/#::
+El directorio FTP instalable como salida de `make release`.
+
+[.filename]#/pub/FreeBSD/ports/arch/packages-X.Y-release/#::
+El paquete completo construido para este lanzamiento.
+
+[.filename]#/pub/FreeBSD/releases/arch/X.Y-RELEASE/tools#::
+Un enlace simbólico a [.filename]#../../../tools#.
+
+[.filename]#/pub/FreeBSD/releases/arch/X.Y-RELEASE/packages#::
+A symlink to [.filename]#../../../ports/arch/packages-X.Y-release#.
+
+[.filename]#/pub/FreeBSD/releases/arch/ISO-IMAGES/X.Y/X.Y-RELEASE-arch-*.iso#::
+The ISO images. The "*" is [.filename]#disc1#, [.filename]#disc2#, etc. Only if there is a [.filename]#disc1# and there is an alternative first installation CD (for example a stripped-down install with no windowing system) there may be a [.filename]#mini# as well.
+
+Para más información sobre la arquitectura de espejo de distribución de los sitios FTP de FreeBSD consulte el artículo link:{hubs}[Mirroring FreeBSD].
+
+It may take many hours to two days after updating `ftp-master` before a majority of the Tier-1 FTP sites have the new software depending on whether or not a package set got loaded at the same time. It is imperative that the release engineers coordinate with the http://lists.FreeBSD.org/mailman/listinfo/mirror-announce[FreeBSD mirror site administrators] before announcing the general availability of new software on the FTP sites. Ideally the release package set should be loaded at least four days prior to release day. The release bits should be loaded between 24 and 48 hours before the planned release time with "other" file permissions turned off. This will allow the mirror sites to download it but the general public will not be able to download it from the mirror sites. Mail should be sent to http://lists.FreeBSD.org/mailman/listinfo/mirror-announce[FreeBSD mirror site administrators] at the time the release bits get posted saying the release has been staged and giving the time that the mirror sites should begin allowing access. Be sure to include a time zone with the time, for example make it relative to GMT.
+
+[[dist-cdrom]]
+=== Replicación en CD-ROM
+
+Muy pronto: Consejos para enviar las ISO de FreeBSD a un replicador y las medidas de garantía de calidad que se deben tomar.
+
+[[extensibility]]
+== Extensibilidad
+
+Aunque FreeBSD forma un sistema operativo completo, no hay nada que le obligue a usar el sistema exactamente como lo hemos empaquetado para su distribución. Hemos intentado diseñar el sistema para que sea lo más extensible posible, de modo que pueda servir como una plataforma sobre la que se puedan construir otros productos comerciales. La única "regla" que tenemos sobre esto es que si va a distribuir FreeBSD con cambios no triviales, ¡le animamos a documentar sus mejoras! La comunidad de FreeBSD sólo puede ayudar a apoyar a los usuarios del software que proporcionamos. Ciertamente alentamos la innovación en la forma de instalación avanzada y herramientas de administración, por ejemplo, pero no se puede esperar que respondamos a preguntas sobre ello.
+
+=== Secuencia de comando `bsdinstall`
+
+La herramienta de instalación y configuración del sistema FreeBSD, man:bsdinstall[8], puede ser programada para proporcionar instalaciones automatizadas para grandes sitios. Esta funcionalidad puede ser usada en conjunto con Intel(TM) PXE  para arrancar sistemas de la red.
+
+[[lessons-learned]]
+== Lecciones aprendidas de FreeBSD 4.4
+
+The release engineering process for 4.4 formally began on August 1st, 2001. After that date all commits to the `RELENG_4` branch of FreeBSD had to be explicitly approved by the Release Engineering Team mailto:re@FreeBSD.org[re@FreeBSD.org]. The first release candidate for the x86 architecture was released on August 16, followed by 4 more release candidates leading up to the final release on September 18th. The security officer was very involved in the last week of the process as several security issues were found in the earlier release candidates. A total of over _500_ emails were sent to the Release Engineering Team mailto:re@FreeBSD.org[re@FreeBSD.org] in little over a month.
+
+Nuestra comunidad de usuarios ha dejado muy claro que la seguridad y la estabilidad de una versión de FreeBSD no debería sacrificarse por ningún plazo o fecha de lanzamiento que se imponga a sí misma. El Proyecto FreeBSD ha crecido enormemente durante su vida y la necesidad de procedimientos de ingeniería de liberación estandarizados nunca ha sido más evidente. Esto se hará aún más importante a medida que FreeBSD se vaya portando a nuevas plataformas.
+
+[[future]]
+== Direcciones futuras
+
+Es imperativo que nuestras actividades de ingeniería de liberación se escalen con nuestra creciente base de usuarios. En esta línea estamos trabajando muy duro para documentar los procedimientos involucrados en la producción de releases de FreeBSD.
+
+* _Parallelism_ - Certain portions of the release build are actually "embarrassingly parallel". Most of the tasks are very I/O{nbsp}intensive, so having multiple high-speed disk drives is actually more important than using multiple processors in speeding up the `make release` process. If multiple disks are used for different hierarchies in the man:chroot[2] environment, then the CVS checkout of the [.filename]#ports# and [.filename]#doc# trees can be happening simultaneously as the `make world` on another disk. Using a RAID solution (hardware or software) can significantly decrease the overall build time.
+* _Cross-building releases_ - Building IA-64 or Alpha release on x86 hardware? `make TARGET=ia64 release`.
+* _Regression Testing_ - We need better automated correctness testing for FreeBSD.
+* _Installation Tools_ - Our installation program has long since outlived its intended life span. Several projects are under development to provide a more advanced installation mechanism. The libh project was one such project that aimed to provide an intelligent new package framework and GUI installation program.
+
+
+[[ackno]]
+== Agradecimientos
+
+I would like to thank Jordan Hubbard for giving me the opportunity to take on some of the release engineering responsibilities for FreeBSD{nbsp}4.4 and also for all of his work throughout the years making FreeBSD what it is today. Of course the release would not have been possible without all of the release-related work done by Satoshi Asami mailto:asami@FreeBSD.org[asami@FreeBSD.org], Steve Price mailto:steve@FreeBSD.org[steve@FreeBSD.org], Bruce A. Mah mailto:bmah@FreeBSD.org[bmah@FreeBSD.org], Nik Clayton mailto:nik@FreeBSD.org[nik@FreeBSD.org], David O'Brien mailto:obrien@FreeBSD.org[obrien@FreeBSD.org], Kris Kennaway mailto:kris@FreeBSD.org[kris@FreeBSD.org], John Baldwin mailto:jhb@FreeBSD.org[jhb@FreeBSD.org] and the rest of the FreeBSD development community. I would also like to thank Rodney W. Grimes mailto:rgrimes@FreeBSD.org[rgrimes@FreeBSD.org], Poul-Henning Kamp mailto:phk@FreeBSD.org[phk@FreeBSD.org], and others who worked on the release engineering tools in the very early days of FreeBSD. This article was influenced by release engineering documents from the CSRG  , the NetBSD Project,  , and John Baldwin's proposed release engineering process notes. 

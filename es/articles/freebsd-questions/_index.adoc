@@ -1,0 +1,235 @@
+---
+title: Cómo obtener los mejores resultados de la lista de correo FreeBSD-questions
+authors:
+  - author: Greg Lehey
+    email: grog@FreeBSD.org
+releaseinfo: "$FreeBSD$" 
+trademarks: ["freebsd", "microsoft", "opengroup", "qualcomm", "general"]
+---
+
+= Cómo obtener los mejores resultados de la lista de correo FreeBSD-questions
+:doctype: article
+:toc: macro
+:toclevels: 1
+:icons: font
+:sectnums:
+:sectnumlevels: 6
+:source-highlighter: rouge
+:experimental:
+:lang: es
+:toc-title: Tabla de contenidos
+:part-signifier: Parte
+:chapter-signifier: Capítulo
+:appendix-caption: Apéndice
+:table-caption: Tabla
+:figure-caption: Figura
+:example-caption: Ejemplo
+
+include::shared/es/urls.adoc[]
+
+[.abstract-title]
+Resumen
+
+Este documento proporciona información útil para las personas que buscan preparar un correo electrónico para la lista de correo de preguntas de FreeBSD. Se dan consejos y sugerencias que maximizarán la posibilidad de que el lector reciba respuestas útiles.
+
+Este documento se publica regularmente en la lista de correo FreeBSD-questions.
+
+'''
+
+toc::[]
+
+== Introducción
+
+`FreeBSD-questions` es una lista de correo mantenida por el proyecto FreeBSD para ayudar a las personas que tienen preguntas sobre el uso cotidiano de FreeBSD. Otro grupo, `FreeBSD-hackers`, discute preguntas más avanzadas, como el trabajo a desarrollar en el futuro.
+
+[NOTE]
+====
+El término "hacker" no tiene nada que ver con irrumpir en los ordenadores de otras personas. El término correcto para esta actividad es "cracker", pero la prensa popular todavía no es conocedora. Los hackers de FreeBSD desaprueban enérgicamente las actividades de craqueo y no se involucran en este tipo de actividades. Para obtener una descripción más amplia de los hackers, consulte http://www.catb.org/~esr/faqs/hacker-howto.html[Cómo convertirse en un hacker] de Eric Raymond
+====
+
+Esta es una publicación regular destinada a ayudar tanto a aquellos que buscan consejos en la lista FreeBSD-questions (los "recién llegados"), como a aquellos que responden a las preguntas (los "hackers").
+
+Inevitablemente, existe cierta fricción, que se deriva de los diferentes puntos de vista de los dos grupos. Los recién llegados acusan a los piratas informáticos de ser arrogantes, engreídos e inútiles, mientras que los piratas informáticos acusan a los recién llegados de ser estúpidos, incapaces de leer un inglés sencillo y esperar que todo les sea entregado en bandeja de plata. Por supuesto, hay un elemento de verdad en ambas afirmaciones, pero en su mayor parte estos puntos de vista provienen de una sensación de frustración.
+
+En este documento, me gustaría hacer algo para aliviar esta frustración y ayudar a todos a obtener mejores resultados de las preguntas de FreeBSD. En la siguiente sección, recomiendo cómo enviar una pregunta; después de eso, veremos cómo responder a una.
+
+== Cómo Suscribirse a FreeBSD-questions
+
+FreeBSD-questions es una lista de correo, por lo que necesita una cuenta de correo electrónico. Acceda con su navegador web a la http://lists.FreeBSD.org/mailman/listinfo/freebsd-questions[página de información de la lista FreeBSD-questions]. En la sección titulada "Suscribirse a freebsd-questions" rellena el campo "Su dirección de correo electrónico"; los demás campos son opcionales.
+
+[NOTE]
+====
+El campo contraseña en el formulario de suscripción solo proporciona una seguridad moderada, pero debería evitar que otros accedan con su suscripción. _No use una contraseña valiosa_ ya que de manera ocasional se le enviará por correo electrónico en texto plano.
+====
+
+Recibirá un mensaje de confirmación de mailman; siga las instrucciones incluidas en el mensaje para completar su suscripción.
+
+Finalmente, cuando reciba el mensaje de "Bienvenida" de mailman informando los detalles de la lista y la contraseña para acceder al área restringida, _por favor guárdelo_. Si algún día desea salir de la lista, necesitará la información contenida en este mensaje. Vea la siguiente sección para más detalles.
+
+== Cómo cancelar la suscripción a FreeBSD-questions
+
+Cuando se subscribió a FreeBSD-Questions, recibió un mensaje de bienvenida de mailman. En este mensaje, entre otras cosas, le indicaba cómo darse de baja. Un mensaje típico:
+
+....
+Bienvenida a la
+      freebsd-questions@freebsd.org lista de correo!
+
+Para publicar en esta lista, envíe su correo electrónico a:
+
+  freebsd-questions@freebsd.org
+
+La información general sobre la lista de correo está en:
+
+  https://lists.freebsd.org/mailman/listinfo/freebsd-questions
+
+Si alguna vez desea darse de baja o cambiar sus opciones (por ejemplo, cambie a
+o desde el modo resumen, cambie su contraseña, etc.), visite su
+página de suscripción en:
+
+https://lists.freebsd.org/mailman/options/freebsd-questions/grog%40lemsi.de
+
+También puede realizar dichos ajustes por correo electrónico enviando un mensaje a:
+
+  freebsd-questions-request@freebsd.org
+
+con la palabra 'ayuda' en el tema o cuerpo (no incluya la
+citas), y recibirá un mensaje con instrucciones.
+
+Debe conocer su contraseña para cambiar sus opciones (incluido el cambio
+la contraseña, en sí) o para darse de baja. Está:
+
+  12345
+
+Normalmente, Mailman le recordará su lista de correo de freebsd.org
+contraseñas una vez al mes, aunque puede desactivar esto si
+preferir. Este recordatorio también incluirá instrucciones sobre cómo
+darse de baja o cambiar las opciones de su cuenta. También hay un botón en
+su página de opciones que le enviará por correo electrónico su contraseña actual.
+....
+
+Desde la dirección URL que aparece en el mensaje de "Bienvenida", puede visitar la "Página de administración de su cuenta" y hacer una solicitud para "Darse de baja" de la lista FreeBSD-questions.
+
+Se le enviará un mensaje de confirmación de  mailman; siga las instrucciones incluidas para finalizar la cancelación de la suscripción
+
+Si ya lo ha hecho, y aún no ha podido entender lo que está ocurriendo, envíe un mensaje a mailto:freebsd-questions-request@FreeBSD.org[freebsd-questions-request@FreeBSD.org], y lo resolverán por usted. _No envíe_ un mensaje a FreeBSD-questions: no pueden ayudarle.
+
+== ¿Debo preguntar en `-questions` o en `-hackers`?
+
+Dos listas de correo manejan las preguntas generales sobre FreeBSD, `FreeBSD-questions` y `FreeBSD-hackers`. En algunos casos, no está realmente claro a qué grupo debe preguntar. Sin embargo, los siguientes criterios deberían ayudar en el 99% de los casos:
+
+. Si la pregunta es de carácter general, pregunte en `FreeBSD-questions`. Como ejemplos podrían ser preguntas sobre la instalación de FreeBSD o el uso de una utilidad particular de UNIX(TM).
+. Si usted cree que la pregunta está relacionada con un error, pero no está seguro de ello, o no sabe cómo buscarlo, envíe el mensaje a `FreeBSD-questions`.
+. Si la pregunta está relacionada con un error, y está _seguro_ de que se trata de un error (por ejemplo, puede ubicar el lugar en el código donde ocurre, y quizás tenga una solución), envíe el mensaje a `FreeBSD-hackers`.
+. Si la pregunta está relacionada con mejoras en FreeBSD, y puede sugerir cómo implementarlas, envíe el mensaje a `FreeBSD-hackers`.
+
+También hay una serie de link:{handbook}#eresources-mail[listas de correo especializadas], que atienden a intereses más específicos. Los criterios anteriores se aplican, y es de su interés atenerse a ellos, ya que es más probable que obtenga buenos resultados de esa manera.
+
+== Antes de enviar una pregunta
+
+Puede (y debe) hacer algunas cosas usted mismo antes de hacer una pregunta en una de las listas de correo:
+
+* Intente resolver el problema por su cuenta. Si publica una pregunta que muestra que ha intentado resolver el problema, su pregunta generalmente atraerá una atención más positiva de las personas que la lean. Intentar resolver el problema usted mismo también mejorará su comprensión de FreeBSD, y eventualmente le permitirá usar su conocimiento para ayudar a otros respondiendo preguntas publicadas en las listas de correo.
+* Lea las páginas del manual y la documentación de FreeBSD (ya sea la instalada en [.filename]#/usr/doc# o accesible a través de WWW en link:{handbook}[http://www.FreeBSD.org]), especialmente el manual y las link:{faq}[FAQ].
+* Navegue y/o busque en los archivos de la lista de correo, para ver si su pregunta o una similar ya ha sido preguntada (y posiblemente contestada) en la lista. Puede navegar y/o buscar en los archivos de las listas de correo en https://www.FreeBSD.org/mail[https://www.FreeBSD.org/mail] y https://www.FreeBSD.org/search/#mailinglists[https://www.FreeBSD.org/search/search.html#mailinglists] respectivamente. También se puede hacer en otros sitios Web, por ejemplo en http://marc.theaimsgroup.com[http://marc.theaimsgroup.com].
+* Use un motor de búsqueda como http://www.google.com[Google] o http://www.yahoo.com[Yahoo] para encontrar respuestas a su pregunta.
+
+== Cómo Enviar una Pregunta
+
+Al enviar una pregunta a FreeBSD-questions, tenga en cuenta los siguientes puntos:
+
+* Recuerde que a nadie se le paga por responder una pregunta de FreeBSD. Lo hacen por su propia voluntad. Puede influir positivamente en este libre albedrío enviando una pregunta bien formulada que proporcione tanta información relevante como sea posible. Puede influir negativamente en este libre albedrío enviando una pregunta incompleta, ilegible o grosera. Es perfectamente posible enviar un mensaje a FreeBSD-questions y no obtener una respuesta incluso si sigue estas reglas. Es mucho más posible no obtener una respuesta si no la recibe. En el resto de este documento, veremos cómo aprovechar al máximo su pregunta sobre FreeBSD-questions.
+* No todos los que responden a las preguntas de FreeBSD leen todos los mensajes: miran la línea del asunto y deciden si les interesa. Obviamente, le interesa especificar un asunto. "Problema en FreeBSD" o "Ayuda" no son suficientes. Si no proporciona ningún asunto, muchas personas no se molestarán ni en leerlo. Si su asunto no es lo suficientemente específico, las personas que puedan responderlo podrían no leerlo.
+* Formatee su mensaje para que sea legible, y POR FAVOR NO GRITE !!!!!. Apreciamos que mucha gente no hable inglés como su primer idioma, y tratamos de hacer concesiones por eso, pero es realmente doloroso intentar leer un mensaje escrito lleno de errores tipográficos o sin saltos de línea.
++ 
+No subestime el efecto que tiene un mensaje de correo mal formateado, no solo en la lista de correo de preguntas de FreeBSD. Su mensaje de correo es todo lo que la gente ve de usted, y si está mal formateado, una línea por párrafo, mal escrito o lleno de errores, le dará a la gente una mala impresión de usted.
++ 
+Muchos mensajes mal formateados provienen de http://www.lemis.com/email.html[servicios de correo incorrectos o mal configurados]. Se sabe que los siguientes servicios de correo envían mensajes mal formateados sin que usted se entere de ello:
+
+** Eudora(TM)
+** exmh
+** Microsoft(TM) Exchange
+** Microsoft(TM)Outlook(TM)
+
++ 
+Trate de no usar  MIME : mucha gente usa mailers que no se llevan muy bien con  MIME .
+* Asegúrese de que su hora y zona horaria estén configuradas correctamente. Esto puede parecer un poco tonto, ya que su mensaje todavía llega, pero muchas de las personas a las que está tratando de llegar reciben varios cientos de mensajes al día. Con frecuencia clasifican los mensajes entrantes por asunto y por fecha, y si su mensaje no llega antes de la primera respuesta, es posible que asuman que se lo perdieron y no se molestan en mirar.
+* No incluya preguntas no relacionadas en el mismo mensaje. En primer lugar, un mensaje largo tiende a asustar a la gente y, en segundo lugar, es más difícil conseguir que todas las personas que pueden responder a todas las preguntas lean el mensaje.
+* Especifique la mayor cantidad de información posible. Esta es un área difícil y necesitamos ampliar la información que necesita enviar, pero aquí hay un comienzo:
+
+** En casi todos los casos, es importante conocer la versión de FreeBSD que está ejecutando. Este es particularmente el caso de FreeBSD-CURRENT, donde también debe especificar la fecha de las fuentes, aunque por supuesto no debe enviar preguntas sobre -CURRENT a FreeBSD-questions.
+** Con cualquier problema que _pueda_ estar relacionado con el hardware, infórmenos sobre su hardware. En caso de duda, supongamos que es posible que sea el hardware. ¿Qué tipo de CPU está utilizando? ¿Cómo de rápida? ¿Qué placa base? ¿Cuánta memoria? ¿Qué periféricos?
++ 
+Se trata de una opinión personal, desde luego, pero la salida del comando man:dmesg[8] con frecuencia puede ser muy útil, ya que no solo indica qué hardware está ejecutando, sino también qué versión de FreeBSD.
+** Si recibe mensajes de error, no diga "Recibo mensajes de error", diga (por ejemplo) "Me aparece el mensaje de error 'No route to host'".
+** Si su sistema entra en "panic", no diga "Mi sistema entró en panic", diga (por ejemplo) "Mi sistema entró en panic con el mensaje 'free vnode isn't'".
+** Si tiene dificultades para instalar FreeBSD, díganos qué hardware tiene. En particular, es importante conocer las IRQ y las direcciones de E / S de las placas instaladas en su máquina.
+** Si tiene dificultades para ejecutar PPP, describa la configuración. ¿Qué versión de PPP usas? ¿Qué tipo de autenticación tienes? ¿Tiene una dirección IP estática o dinámica? ¿Qué tipo de mensajes recibe en el archivo de registro?
+
+* Mucha de la información que debe proporcionar es la salida de programas, como man:dmesg[8] o mensajes de consola, que generalmente aparecen en [.filename]#/var/log/messages#. No intente copiar esa información escribiéndola de nuevo; es un suplicio, y cometerá un error. Para enviar el contenido del log, haga una copia del archivo y use un editor para recortar la información que sea relevante, o corte y pegue en su mensaje. Para la salida de programas como man:dmesg[8], redirija la salida a un archivo e inclúyalo. Por ejemplo,
++
+[source,bash]
+....
+% dmesg > /tmp/dmesg.out
+....
++ 
+Esto redirige la información al archivo [.filename]#/tmp/dmesg.out#.
+* Si hace todo esto y aún no obtiene una respuesta, podría haber otras razones. Por ejemplo, el problema es tan complicado que nadie sabe la respuesta, o la persona que sí sabe la respuesta estaba fuera de línea. Si no recibe una respuesta después de, digamos, una semana, podría ser útil volver a enviar el mensaje. Sin embargo, si no obtiene una respuesta a su segundo mensaje, probablemente no obtendrá una de este foro. Reenviar el mismo mensaje una y otra vez solo te hará impopular.
+
+En resumen, supongamos que conoce la respuesta a la siguiente pregunta (sí, es la misma en cada caso). Usted elige cuál de estas dos preguntas estaría más preparado para responder:
+
+.Mensaje 1
+[example]
+====
+....
+Asunto: AYUDA!!?! ??
+Simplemente no puedo conseguir golpes malditos y tontos del sistema FereBSD para
+funcionó, y soy muy bueno en este tsuff, pero nunca he visto
+cualquier cosa que sea difícil de instalar, no funcionará, haga lo que intente
+Entonces, ¿por qué no me dicen qué estoy haciendo mal?
+....
+====
+
+.Mensaje 2
+[example]
+====
+....
+Asunto: Problemas al instalar FreeBSD
+
+Acabo de recibir el CDROM FreeBSD 2.1.5 de Walnut Creek y tengo muchas
+dificultades para instalarlo. Tengo un 486 con 66 MHz, 16 MB
+de memoria y una placa SCSI 1540A Adaptec, un disco Quantum Fireball de 1.2GB y
+una unidad de CDROM Toshiba 3501XA. La instalación funciona bien,
+pero cuando intento reiniciar el sistema, aparece el mensaje
+Missing Operating System.
+....
+====
+
+== Cómo dar seguimiento a una pregunta
+
+A menudo, querrá enviar información adicional a una pregunta que ya ha enviado. La mejor forma de hacerlo es responder a su mensaje original. Esto tiene tres ventajas:
+
+. Incluyes el texto del mensaje original, para que la gente sepa de qué estás hablando. Sin embargo, no olvide recortar el texto innecesario.
+. El texto en la línea de asunto permanece igual (se acordó de poner uno, ¿no es así?). Muchos remitentes clasifican los mensajes por asunto. Esto ayuda a agrupar los mensajes.
+. Los números de referencia del mensaje en el encabezado se refieren al mensaje anterior. Algunos gestores de correo, como http://www.mutt.org/[mutt], pueden agrupar los mensajes en _hilos_, mostrando las relaciones exactas entre los mensajes.
+
+== Cómo Responder a una Pregunta
+
+Antes de responder una pregunta a FreeBSD-questions, considere:
+
+. Muchos de los puntos sobre el envío de preguntas también se aplican a la respuesta a preguntas. Léelos.
+. ¿Alguien ya ha respondido la pregunta? La forma más fácil de verificar esto es ordenar su correo entrante por asunto: luego (con suerte) verá la pregunta seguida de las respuestas, todas juntas.
++ 
+Si alguien ya la ha respondido, no significa automáticamente que no deba enviar otra respuesta. Pero tiene sentido leer primero todas las demás respuestas.
+. ¿Tiene algo que aportar más allá de lo que ya se ha dicho? En general, las respuestas del tipo "Sí, yo también" no ayudan mucho, aunque hay excepciones, como cuando alguien está describiendo un problema que está teniendo, y no sabe si es culpa suya o si hay algo mal con el hardware o software. Si va a enviar una respuesta de tipo "yo también", debe incluir otra información relevante.
+. ¿Está seguro de que comprende la pregunta? Con mucha frecuencia, la persona que hace la pregunta se confunde o no se expresa muy bien. Incluso con la mejor comprensión del sistema, es fácil enviar una respuesta que no responde a la pregunta. Esto no ayuda: dejará a la persona que envió la pregunta más frustrada o confundida que nunca. Si nadie más responde y usted tampoco está muy seguro, siempre puede solicitar más información.
+. ¿Está seguro de que su respuesta es correcta? Si no, espere un día o así. Si a nadie más se le ocurre una respuesta mejor, aún puede responder y decir, por ejemplo, "No sé si esto es correcto, pero como nadie más ha respondido, ¿por qué no intenta reemplazar su CDROM ATAPI con una rana?".
+. A menos que haya una buena razón para hacer lo contrario, responda al remitente y a FreeBSD-questions. Muchas personas en FreeBSD-questions son "lurkers": aprenden leyendo mensajes enviados y respondidos por otras personas. Si quita de la lista un mensaje que es de interés general, está privando a estas personas de su información. Tenga cuidado con las respuestas grupales; mucha gente envía mensajes con cientos de CC. Si es así, asegúrese de reducir las líneas Cc: apropiadamente.
+. Incluya texto relevante del mensaje original. Córtelo al mínimo, pero no se exceda. Aún debe ser posible que alguien que no haya leído el mensaje original entienda de lo que estás hablando.
+. Use alguna técnica para identificar qué texto proviene del mensaje original y qué texto agrega. Personalmente encuentro que anteponer "`> `" al mensaje original funciona mejor. Dejando espacios en blanco después de "`> ;`" y deje líneas vacías entre el texto y el texto original para que el resultado sea más legible.
+. Pon tu respuesta en el lugar correcto (después del texto al que responde). Es muy difícil leer un hilo de respuestas donde cada respuesta viene antes del texto al que responde.
+. La mayoría de los programas de correo electrónico cambian la línea del asunto en una respuesta, agregando al principio de este un texto del tipo "Re: ". Si su programa no lo hace automáticamente, debe hacerlo manualmente.
+. Si el remitente no cumplió con las convenciones de formato (líneas demasiado largas, asunto inapropiado) _por favor_, corríjalo. En caso de un asunto incorrecto (como "¿¿¡¡AYUDA!!??"), cambie el asunto a (por ejemplo) "Re: Dificultades con la sincronización de PPP (was: ¿¿¡¡AYUDA!!??)". De esa manera, otras personas que intenten seguir el hilo tendrán menos dificultad para seguirlo.
++ 
+En tales casos, es apropiado decir lo que hizo y por qué lo hizo, pero trate de no ser grosero. Si encuentra que no puede responder sin ser grosero, no responda.
++ 
+Si solo desea responder a un mensaje debido a su formato incorrecto, simplemente responda al remitente, no a la lista. Puede enviarle este mensaje en respuesta, si lo desea.

@@ -1,0 +1,597 @@
+---
+title: Scripting práctico rc.d en BSD
+authors:
+  - author: Yar Tikhiy
+    email: yar@FreeBSD.org
+copyright: 2005-2006, 2012 The FreeBSD Project
+releaseinfo: "$FreeBSD$" 
+trademarks: ["freebsd", "netbsd", "general"]
+---
+
+= Scripting práctico rc.d en BSD
+:doctype: article
+:toc: macro
+:toclevels: 1
+:icons: font
+:sectnums:
+:sectnumlevels: 6
+:source-highlighter: rouge
+:experimental:
+
+include::shared/en/urls.adoc[]
+
+[.abstract-title]
+Abstract
+
+Los principiantes pueden tener dificultades para relacionar los hechos de la documentación formal en el BSD [.filename]#rc.d# marco con las tareas prácticas de [.filename]#rc.d# secuencias de comandos. En este artículo, consideramos algunos casos típicos de complejidad creciente, mostrar [.filename]#rc.d# características adecuadas para cada caso y comentar cómo funcionan. Dicho examen debe proporcionar puntos de referencia para un estudio más detallado del diseño y la aplicación eficiente de [.filename]#rc.d#.
+
+'''
+
+toc::[]
+
+[[rcng-intro]]
+== Introducción
+
+El BSD histórico tenía un guión de inicio monolítico, [.filename]#/etc/rc#.Fue invocado por man:init[8] en el momento del arranque del sistema y realizó todas las tareas de la zona de usuario necesarias para la operación de múltiples usuarios: comprobar y montar sistemas de archivos, configurar la red, iniciar demonios, etc. La lista precisa de tareas no es la misma en todos los sistemas; los administradores necesitaban personalizarlo. Con pocas excepciones, [.filename]#/etc/rc# tuvo que ser modificado, y a los verdaderos hackers les gustó.
+
+El verdadero problema con el enfoque monolítico era que no proporcionaba control sobre los componentes individuales a partir de [.filename]#/etc/rc#. Por ejemplo, [.filename]#/etc/rc# no se pudo reiniciar un solo demonio. El administrador del sistema tuvo que encontrar el proceso del demonio a mano, matarlo, esperar hasta que realmente saliera y luego examinar [.filename]#/etc/rc# para las banderas, y finalmente escriba la línea de comando completa para iniciar el demonio nuevamente. La tarea se volvería aún más difícil y propensa a errores si el servicio a reiniciar consistiera en más de un demonio o exigiera acciones adicionales. En pocas palabras, el único script no cumplió con el propósito de los scripts: facilitar la vida del administrador del sistema.
+
+Más tarde hubo un intento de dividir algunas partes de [.filename]#/etc/rc#con el fin de iniciar los subsistemas más importantes por separado. El ejemplo notorio fue [.filename]#/etc/netstart#para sacar a relucir el networking. Permitió acceder a la red desde el modo de usuario único, pero no se integró bien en el proceso de inicio automático porque algunas partes de su código debían intercalarse con acciones esencialmente no relacionadas con la red. Por eso [.filename]#/etc/netstart# mutado en [.filename]#/etc/rc.network#. Este último ya no era un guión ordinario; se compone de grandes, enredados man:sh[1] funciones llamadas desde [.filename]#/etc/rc# en diferentes etapas del inicio del sistema. Sin embargo, a medida que las tareas de inicio se volvieron diversas y sofisticadas, el "quasi-modular" enfoque se convirtió en un lastre incluso más que el monolítico [.filename]#/etc/rc# había sido.
+
+Sin un marco limpio y bien diseñado, los scripts de inicio tuvieron que hacer todo lo posible para satisfacer las necesidades de los sistemas operativos basados en BSD en rápido desarrollo. Por fin se hizo evidente que se necesitan más pasos en el camino hacia una estructura fina y extensible. [.filename]#rc# sistema. Así BSD [.filename]#rc.d# nació. Sus padres reconocidos fueron Luke Mewburn y la comunidad NetBSD. Posteriormente se importó a FreeBSD. Su nombre se refiere a la ubicación de los scripts del sistema para servicios individuales, que se encuentra en [.filename]#/etc/rc.d#. Pronto conoceremos más componentes de la [.filename]#rc.d# sistema y ver cómo se invocan los scripts individuales.
+
+Las ideas básicas detrás de BSD [.filename]#rc.d# son _fina modularidad_ Y _reutilización de código_. _Fina modularidad_ Significa que cada básico "servicio" como un demonio del sistema o una tarea de inicio primitiva, obtiene su propia man:sh[1] script capaz de iniciar el servicio, detenerlo, recargarlo, verificar su estado. Una acción particular se elige mediante el argumento de la línea de comandos del script. los [.filename]#/etc/rc# El script todavía impulsa el inicio del sistema, pero ahora simplemente invoca los scripts más pequeños uno por uno con el `start` argumento. También es fácil realizar tareas de apagado ejecutando el mismo conjunto de scripts con el `stop` argumento, que es hecho por [.filename]#/etc/rc.shutdown#. Tenga en cuenta lo cerca que sigue la forma Unix de tener un conjunto de pequeñas herramientas especializadas, cada una cumpliendo su tarea lo mejor posible. _Reutilización de código_ significa que las operaciones comunes se implementan como man:sh[1] funciones y recogidas en [.filename]#/etc/rc.subr#. Ahora, un script típico puede tener solo unas pocas líneas de {man:sh[1] código. Finalmente, una parte importante de la [.filename]#rc.d# marco es {man:rcorder[8], que ayuda [.filename]#/etc/rc# para ejecutar los pequeños scripts de forma ordenada con respecto a las dependencias entre ellos. Puede ayudar [.filename]#/etc/rc.shutdown#, también, porque el orden correcto para la secuencia de apagado es opuesto al de inicio.
+
+El BSD [.filename]#rc.d# el diseño se describe en <<lukem,el artículo original de Luke Mewburn>>, y el [.filename]#rc.d# Los componentes están documentados con gran detalle en <<manpages,las respectivas páginas del manual>>.Sin embargo, puede que no parezca obvio para un [.filename]#rc.d# novato cómo unir las numerosas partes y piezas para crear un guión con estilo para una tarea en particular. Por lo tanto, este artículo intentará un enfoque diferente para describir [.filename]#rc.d#.Mostrará qué funciones deben usarse en varios casos típicos y por qué. Tenga en cuenta que este no es un documento de instrucciones porque nuestro objetivo no es dar recetas listas para usar, sino mostrar algunas entradas fáciles al [.filename]#rc.d# reino. Este artículo tampoco sustituye a las páginas del manual correspondientes. No dude en consultarlos para obtener documentación más formal y completa mientras lee este artículo.
+
+Hay requisitos previos para comprender este artículo. En primer lugar, debe estar familiarizado con el man:sh[1] lenguaje de secuencias de comandos para dominar [.filename]#rc.d#. Además, debe saber cómo realiza el sistema las tareas de inicio y apagado del área de usuario, que se describe en man:rc[8].
+
+Este artículo se centra en la rama FreeBSD de [.filename]#rc.d#. Sin embargo, también puede ser útil para los desarrolladores de NetBSD, porque las dos ramas de BSD [.filename]#rc.d# no solo comparten el mismo diseño, sino que también son similares en sus aspectos visibles para los autores de guiones.
+
+[[rcng-task]]
+== Delineando la tarea
+
+Un poco de consideración antes de empezar `$EDITOR` no Dolera. Para escribir un buen temperamento [.filename]#rc.d# script para un servicio del sistema, deberíamos poder responder las siguientes preguntas primero:
+
+* ¿El servicio es obligatorio u opcional?
+* ¿El script servirá a un solo programa, por ejemplo, un demonio, o realizará acciones más complejas?
+* ¿De qué otros servicios dependerá nuestro servicio y viceversa?
+
+De los ejemplos que siguen veremos por qué es importante conocer las respuestas a estas preguntas.
+
+[[rcng-dummy]]
+== Un guión ficticio
+
+El siguiente script simplemente emite un mensaje cada vez que se inicia el sistema:
+
+[.programlisting]
+....
+#!/bin/sh
+
+. /etc/rc.subr
+
+name="dummy"
+start_cmd="${name}_start"
+stop_cmd=":"
+
+dummy_start()
+{
+	echo "Nothing started."
+}
+
+load_rc_config $name
+run_rc_command "$1"
+....
+
+Las cosas a tener en cuenta son:
+
+Un guión interpretado debe comenzar con la magia "shebang" línea. Esa línea especifica el programa intérprete del guión. Debido a la línea shebang, el script puede invocarse exactamente como un programa binario siempre que tenga el bit de ejecución establecido. (Ver man:chmod[1].) Por ejemplo, un administrador del sistema puede ejecutar nuestro script manualmente, desde la línea de comando:
+
+[source,bash]
+....
+
+# /etc/rc.d/dummy start
+....
+
+
+[NOTE]
+====
+Para ser adecuadamente gestionado por el [.filename]#rc.d# framework, sus scripts deben estar escritos en el man:sh[1] idioma. Si tiene un servicio o puerto que utiliza una utilidad de control binario o una rutina de inicio escrita en otro idioma, instale ese elemento en [.filename]#/usr/sbin# (para el sistema) o [.filename]#/usr/local/sbin#(para puertos) y llámalo desde un man:sh[1] guión en el apropiado [.filename]#rc.d# directorio.
+====
+
+
+[TIP]
+====
+Si desea conocer los detalles de por qué [.filename]#rc.d# Los guiones deben estar escritos en el man:sh[1]idioma, mira como [.filename]#/etc/rc# Los invoca mediante `run_rc_script`, luego estudiar la implementación de `run_rc_script` en [.filename]#/etc/rc.subr#.
+====
+
+En [.filename]#/etc/rc.subr#,un numero de man:sh[1] las funciones se definen para un [.filename]#rc.d#script para usar. Las funciones están documentadas en man:rc.subr[8]. Si bien es teóricamente posible escribir un [.filename]#rc.d# script sin usar man:rc.subr[8],sus funciones resultan extremadamente útiles y facilitan el trabajo en un orden de magnitud. Así que no es de extrañar que todo el mundo recurra a man:rc.subr[8] in [.filename]#rc.d# scripts. No vamos a ser una excepción.
+
+un [.filename]#rc.d# script debe "source"[.filename]#/etc/rc.subr# (incluirlo usando".") _antes_ de llamarlo man:rc.subr[8] funciona para que man:sh[1] tiene la oportunidad de aprender las funciones. El estilo preferido es fuente [.filename]#/etc/rc.subr# ante todo.
+
+[NOTE]
+====
+Algunas funciones útiles relacionadas con las redes son proporcionadas por otro archivo de inclusión, [.filename]#/etc/network.subr#.
+====
+
+[[name-var]]La variable obligatoria `name` especifica el nombre de nuestro script. Es requerido por man:rc.subr[8]. Es decir, cada [.filename]#rc.d# script _must_ set `name` antes de que llame man:rc.subr[8] funciones.
+
+Ahora es el momento adecuado para elegir un nombre único para nuestro script de una vez por todas. Lo usaremos en varios lugares mientras desarrollamos el guión. Para empezar, démosle también el mismo nombre al archivo de script.
+
+[NOTE]
+====
+El estilo actual de [.filename]#rc.d# la secuencia de comandos consiste en encerrar los valores asignados a las variables entre comillas dobles. Tenga en cuenta que es solo una cuestión de estilo que no siempre es aplicable. Puede omitir con seguridad las citas de las palabras simples sinman:sh[1] metacaracteres en ellos, mientras que en ciertos casos necesitará comillas simples para evitar cualquier interpretación del valor por man:sh[1]. Un programador debería poder distinguir la sintaxis del lenguaje de las convenciones de estilo y utilizar ambas con prudencia.
+====
+
+La idea principal detrásman:rc.subr[8] es eso un [.filename]#rc.d#La secuencia de comandos proporciona controladores o métodos para man:rc.subr[8] invocar. En particular, `start`, `stop`, y otros argumentos a un [.filename]#rc.d#El script se maneja de esta manera. Un método es un man:sh[1] expresión almacenada en una variable llamada `_argument__cmd`, dónde _argument_ corresponde a lo que se puede especificar en la línea de comandos del script. Veremos luego como man:rc.subr[8] proporciona métodos predeterminados para los argumentos estándar.
+
+[NOTE]
+====
+Para hacer el código en [.filename]#rc.d# más uniforme, es común usar `${name}` donde sea apropiado. Por tanto, se pueden copiar varias líneas de un script a otro.
+====
+
+Debemos tener en cuenta que man:rc.subr[8] proporciona métodos predeterminados para los argumentos estándar. En consecuencia, debemos anular un método estándar con un no-op man:sh[1] expresión si queremos que no haga nada.
+
+El cuerpo de un método sofisticado se puede implementar como una función. Es una buena idea hacer que el nombre de la función sea significativo.
+
+[IMPORTANT]
+====
+Se recomienda encarecidamente agregar el prefijo `${name}` a los nombres de todas las funciones definidas en nuestro script para que nunca entren en conflicto con las funciones de man:rc.subr[8] u otro archivo de inclusión común.
+====
+
+Esta llamada a man:rc.subr[8] cargas man:rc.conf[5] variables. Nuestro script aún no los usa, pero aún se recomienda cargar man:rc.conf[5]porque puede haber man:rc.conf[5] control de variables man:rc.subr[8] sí mismo.
+
+Por lo general, este es el último comando de una [.filename]#rc.d# script. Invoca elman:rc.subr[8] maquinaria para realizar la acción solicitada utilizando las variables y métodos que ha proporcionado nuestro script.
+
+[[rcng-confdummy]]
+== Un script ficticio configurable
+
+Ahora agreguemos algunos controles a nuestro script ficticio. Como podrias saber, [.filename]#rc.d# slos scripts se controlan con man:rc.conf[5].Por suerte, man:rc.subr[8] hides all the complications from nos. El siguiente script usa man:rc.conf[5] via man:rc.subr[8] para ver si está habilitado en primer lugar y obtener un mensaje para mostrar en el momento del arranque. De hecho, estas dos tareas son independientes. Por un lado, un [.filename]#rc.d# El script solo puede admitir habilitar y deshabilitar su servicio. Por otro lado, una obligación [.filename]#rc.d# El script puede tener variables de configuración. Sin embargo, haremos ambas cosas en el mismo script:
+
+[.programlisting]
+....
+#!/bin/sh
+
+. /etc/rc.subr
+
+name=dummy
+rcvar=dummy_enable
+
+start_cmd="${name}_start"
+stop_cmd=":"
+
+load_rc_config $name
+: ${dummy_enable:=no} 
+: ${dummy_msg="Nothing started."}
+
+dummy_start()
+{
+	echo "$dummy_msg"
+}
+
+run_rc_command "$1"
+....
+
+¿Qué cambió en este ejemplo?
+
+La variable `rcvar` especifica el nombre de la variable del mando ON/OFF.
+
+Ahora `load_rc_config` se invoca anteriormente en el script, antes de cualquier man:rc.conf[5] se accede a las variables.
+
+[NOTE]
+====
+Mientras examina [.filename]#rc.d# scripts, tenga en cuenta queman:sh[1] difiere la evaluación de expresiones en una función hasta que se llama a esta última. Por tanto, no es un error invocar `load_rc_config` tan tarde como justo antes `run_rc_command` y todavía acceder man:rc.conf[5] variables de las funciones de método exportadas a `un_rc_command`.esto se debe a que las funciones del método deben ser llamadas por `run_rc_command`, que se invoca _despues_ `load_rc_config`.
+====
+
+Una advertencia será emitida por `run_rc_command` Si `rcvar` sí mismo está configurado, pero la variable de mando indicada no está configurada. Si tu [.filename]#rc.d# El script es para el sistema base, debe agregar una configuración predeterminada para la perilla [.filename]#/etc/defaults/rc.conf# y documentarlo en man:rc.conf[5]. De lo contrario, es su script el que debería proporcionar una configuración predeterminada para la perilla. El enfoque canónico del último caso se muestra en el ejemplo.
+
+[NOTE]
+====
+Puedes hacer man:rc.subr[8] actuar como si la perilla estuviera en `ON`,independientemente de su configuración actual, anteponiendo el argumento al script con `one` or `force`,como en `onestart` o `forcestop`. Tenga en cuenta que `force` tiene otros efectos peligrosos que veremos a continuación, mientras que `uno` simplemente anula la perilla ON / OFF. Por ejemplo, suponga que `dummy_enable` is `OFF`. El siguiente comando ejecutará el `start` método a pesar de la configuración:
+
+[source,bash]
+....
+
+# /etc/rc.d/dummy onestart
+....
+
+====
+
+Ahora, el mensaje que se mostrará en el momento del arranque ya no está codificado en el script. Está especificado por un man:rc.conf[5] variable nombrada `dummy_msg`. Este es un ejemplo trivial de cómo man:rc.conf[5]las variables pueden controlar un [.filename]#rc.d# script.
+
+[IMPORTANT]
+====
+Los nombres de todos man:rc.conf[5] variables utilizadas exclusivamente por nuestro script _must_ tienen el mismo prefijo: `${name}_`. Por ejemplo: `dummy_mode`, `dummy_state_file`, y así.
+====
+
+[NOTE]
+====
+Si bien es posible utilizar un nombre más corto internamente, por ejemplo, simplemente `msg`, agregando el prefijo único `${name}_` a todos los nombres globales introducidos por nuestro script nos salvará de posibles colisiones con el man:rc.subr[8] espacio de nombres.
+
+Como una regla, [.filename]#rc.d# Los scripts del sistema base no necesitan proporcionar valores predeterminados para su man:rc.conf[5]variables porque los valores predeterminados deben establecerse en [.filename]#/etc/defaults/rc.conf# en lugar. Por otra parte,[.filename]#rc.d# Los scripts para los puertos deben proporcionar los valores predeterminados como se muestra en el ejemplo.
+====
+
+Aquí usamos `dummy_msg` para controlar realmente nuestro script, es decir, para emitir un mensaje variable. El uso de una función de shell es excesivo aquí, ya que solo ejecuta un comando; una alternativa igualmente válida es:
+
+[.programlisting]
+....
+start_cmd="echo \"$dummy_msg\""
+....
+
+[[rcng-daemon]]
+== Inicio y cierre de un demonio simple
+
+Dijimos antes que man:rc.subr[8] podría proporcionar métodos predeterminados. Obviamente, estos valores predeterminados no pueden ser demasiado generales. Son adecuados para el caso común de iniciar y cerrar un programa demonio simple. Supongamos ahora que necesitamos escribir un [.filename]#rc.d# script para un demonio llamado `mumbled`. Aquí está:
+
+[.programlisting]
+....
+#!/bin/sh
+
+. /etc/rc.subr
+
+name=mumbled
+rcvar=mumbled_enable
+
+command="/usr/sbin/${name}"
+
+load_rc_config $name
+run_rc_command "$1"
+....
+
+Agradablemente simple, ¿no? Examinemos nuestro pequeño script. Lo único nuevo a tener en cuenta es lo siguiente:
+
+El `command` variable es significativa para man:rc.subr[8]. Si está configurado, man:rc.subr[8] actuará de acuerdo con el escenario de servir un demonio convencional. En particular, se proporcionarán los métodos predeterminados para tales argumentos: `start`, `stop`, `restart`, `poll`, and `status`.
+
+El demonio se iniciará ejecutando `$command` con banderas de línea de comandos especificadas por `$mumbled_flags`.Por tanto, todos los datos de entrada para el `start` están disponibles en las variables establecidas por nuestro script. diferente a `start`, otros métodos pueden requerir información adicional sobre el proceso iniciado. Por ejemplo, `parar` Debe conocer el PID del proceso para finalizarlo. En el caso presente, man:rc.subr[8]examinará la lista de todos los procesos, buscando un proceso con su nombre igual a `$procname`. Este último es otra variable de significado para man:rc.subr[8], y su valor predeterminado es el de `command`. En otras palabras, cuando establecemos `comando`, `procname` se establece efectivamente en el mismo valor. Esto permite que nuestro script elimine el demonio y verifique si se está ejecutando en primer lugar.
+
+[NOTE]
+====
+Algunos programas son de hecho scripts ejecutables. El sistema ejecuta dicho script iniciando su intérprete y pasándole el nombre del script como un argumento de línea de comandos. Esto se refleja en la lista de procesos, que pueden confundir man:rc.subr[8]. Además, debe configurar `command_interpreter` dejarman:rc.subr[8] conocer el nombre real del proceso si `$command` es un script.
+
+Para cada [.filename]#rc.d# Script, hay un opcional man:rc.conf[5] Variable que tiene prioridad sobre `command`. Su nombre se construye de la siguiente manera: `${name}_program`, donde `name` es la variable obligatoria que discutimos <<name-var,earlier>>. Por ejemplo, en este caso será `mumbled_program`. Es man:rc.subr[8] que arregla `${name}_program` para anular `command`.
+
+Por supuesto, man:sh[1] te permitirá establecer `${name}_program` from man:rc.conf[5] o el propio script incluso si `command` es desarmado. En ese caso, las propiedades especiales de `${name}_program` se pierden y se convierte en una variable ordinaria que su script puede utilizar para sus propios fines. Sin embargo, el uso exclusivo de `${name}_program` se desaconseja porque usarlo junto con `command` se convirtió en un modismo de [.filename]#rc.d# scripting.
+====
+
+Para obtener información más detallada sobre los métodos predeterminados, consulte man:rc.subr[8].
+
+[[rcng-daemon-adv]]
+== Inicio y cierre de un demonio avanzado
+
+Agreguemos un poco de carne a los huesos del guión anterior y hagámoslo más complejo y característico. Los métodos predeterminados pueden hacer un buen trabajo para nosotros, pero es posible que necesitemos algunos de sus aspectos ajustados. Ahora aprenderemos cómo ajustar los métodos predeterminados a nuestras necesidades.
+
+[.programlisting]
+....
+#!/bin/sh
+
+. /etc/rc.subr
+
+name=mumbled
+rcvar=mumbled_enable
+
+command="/usr/sbin/${name}"
+command_args="mock arguments > /dev/null 2>&1"
+
+pidfile="/var/run/${name}.pid"
+
+required_files="/etc/${name}.conf /usr/share/misc/${name}.rules"
+
+sig_reload="USR1"
+
+start_precmd="${name}_prestart"
+stop_postcmd="echo Bye-bye"
+
+extra_commands="reload plugh xyzzy"
+
+plugh_cmd="mumbled_plugh"
+xyzzy_cmd="echo 'Nothing happens.'"
+
+mumbled_prestart()
+{
+	if checkyesno mumbled_smart; then
+		rc_flags="-o smart ${rc_flags}"
+	fi
+	case "$mumbled_mode" in
+	foo)
+		rc_flags="-frotz ${rc_flags}"
+		;;
+	bar)
+		rc_flags="-baz ${rc_flags}"
+		;;
+	*)
+		warn "Invalid value for mumbled_mode"
+		return 1
+		;;
+	esac
+	run_rc_command xyzzy
+	return 0
+}
+
+mumbled_plugh()
+{
+	echo 'A hollow voice says "plugh".'
+}
+
+load_rc_config $name
+run_rc_command "$1"
+....
+
+
+Argumentos adicionales a `$command` se puede pasar en `command_args`. se agregarán a la línea de comando después `$mumbled_flags`.Dado que la línea de comando final se pasa a `eval` para su ejecución real, las redirecciones de entrada y salida se pueden especificar en `command_args`.
+
+[NOTE]
+====
+_Never_ incluir opciones discontinuas, como `-X` o `--foo`, en `command_args`. Los contenidos de `command_args` aparecerá al final de la línea de comando final, por lo que es probable que sigan los argumentos presentes en `${name}_flags`; pero la mayoría de los comandos no reconocerán las opciones discontinuas después de los argumentos ordinarios. Una mejor forma de pasar opciones adicionales a `$command` Es agregarlos al principio de `${name}_flags`. Otra forma es modificar `rc_flags`<<rc-flags,como se muestra más adelante>>.
+====
+
+Un demonio de buena educación debe crear un _pidfile_ para que su proceso se pueda encontrar de manera más fácil y confiable. La variable `pidfile`,Si está configurado, dice man:rc.subr[8] donde puede encontrar el archivo pid para utilizar sus métodos predeterminados.
+
+[NOTE]
+====
+De hecho, man:rc.subr[8] también usará el archivo pid para ver si el demonio ya se está ejecutando antes de iniciarlo. Esta verificación se puede omitir utilizando el `faststart` argumento.
+====
+
+Si el demonio no se puede ejecutar a menos que existan ciertos archivos, simplemente enumerelos en `required_files`, y man:rc.subr[8] comprobará que esos archivos existen antes de iniciar el demonio. Tambien hay `required_dirs` y `required_vars` para directorios y variables de entorno, respectivamente. Todos ellos se describen en detalle en man:rc.subr[8].
+
+[NOTE]
+====
+El método predeterminado de man:rc.subr[8] se puede obligar a omitir las comprobaciones de requisitos previos utilizando `forcestart` como argumento del script.
+====
+
+Podemos personalizar las señales para enviar al demonio en caso de que difieran de las conocidas. En particular,`sig_reload` especifica la señal que hace que el demonio recargue su configuración; es SIGHUP por defecto. Se envía otra señal para detener el proceso del demonio; el valor predeterminado es SIGTERM, pero esto se puede cambiar configurando `sig_stop` adecuadamente.
+
+[NOTE]
+====
+Los nombres de las señales deben especificarse para man:rc.subr[8] sin el `SIG` prefijo, como se muestra en el ejemplo. La versión FreeBSD de man:kill[1] puede reconocer el `SIG` prefijo, pero es posible que las versiones de otros tipos de sistemas operativos no.
+====
+
+Es fácil realizar tareas adicionales antes o después de los métodos predeterminados. Para cada comando-argumento soportado por nuestro script, podemos definir `_argumento__precmd` and `_argument__postcmd`. Estos man:sh[1] los comandos se invocan antes y después del método respectivo, como se desprende de sus nombres.
+
+[NOTE]
+====
+Anulando un método predeterminado con un personalizado `_argument__cmd` todavía no nos impide hacer uso de `_argument__precmd` or `_argument__postcmd` si es necesario. En particular, el primero es bueno para verificar las condiciones sofisticadas y personalizadas que deben cumplirse antes de ejecutar el comando en sí. Utilizando `_argument__precmd` junto con `_argument__cmd` nos permite separar lógicamente los controles de la acción.
+
+No olvide que puede abarrotar cualquier man:sh[1] expresiones en los métodos, pre y post comandos que defina. Invocar simplemente una función que hace el trabajo real es un buen estilo en la mayoría de los casos, pero nunca deje que el estilo limite su comprensión de lo que sucede detrás de la cortina.
+====
+
+Si quisiéramos implementar argumentos personalizados, que también se pueden considerar como _commands_ a nuestro script, debemos incluirlos en `extra_commands` Y proporcionar métodos para manejarlos.
+
+[NOTE]
+====
+El `reload` comando es especial. Por un lado, tiene un método preestablecido en man:rc.subr[8]. Por otra parte,`reload` no se ofrece de forma predeterminada. La razón es que no todos los demonios usan el mismo mecanismo de recarga y algunos no tienen nada que recargar. Por lo tanto, debemos pedir explícitamente que se proporcione la funcionalidad incorporada. Podemos hacerlo a través de `extra_commands`.
+
+¿Qué obtenemos del método predeterminado para `reload`? Muy a menudo, los demonios recargan su configuración al recibir una señal, por lo general, SIGHUP.Por lo tanto man:rc.subr[8] intenta recargar el demonio enviándole una señal. La señal está preconfigurada para SIGHUP pero se puede personalizar a través de `sig_reload` si necesario.
+====
+
+Nuestro script admite dos comandos no estándar, `plugh` y `xyzzy`. Los vimos enumerados en `extra_commands`, y ahora es el momento de proporcionarles métodos. El método para `xyzzy` está en línea mientras que para `plugh` se implementa como el `mumbled_plugh` función.
+
+Los comandos no estándar no se invocan durante el inicio o el apagado. Por lo general, son para conveniencia del administrador del sistema. También se pueden utilizar desde otros subsistemas, por ejemplo, man:devd[8] si se especifica en man:devd.conf[5].
+
+La lista completa de comandos disponibles se puede encontrar en la línea de uso impresa por man:rc.subr[8] cuando se invoca el script sin argumentos. Por ejemplo, aquí está la línea de uso del script en estudio:
+
+[source,bash]
+....
+
+# /etc/rc.d/mumbled
+Usage: /etc/rc.d/mumbled [fast|force|one](start|stop|restart|rcvar|reload|plugh|xyzzy|status|poll)
+....
+
+Un script puede invocar sus propios comandos estándar o no estándar si es necesario. Esto puede parecer similar a las funciones de llamada, pero sabemos que los comandos y las funciones del shell no siempre son lo mismo. Por ejemplo, `xyzzy` no se implementa como una función aquí. Además, puede haber un comando previo y posterior, que deben invocarse de manera ordenada. Entonces, la forma correcta para que un script ejecute su propio comando es mediante man:rc.subr[8], como se muestra en el ejemplo.
+
+Una práctica función llamada `checkyesno` es proporcionado por man:rc.subr[8].Toma un nombre de variable como argumento y devuelve un código de salida cero si y solo si la variable se establece en `SI`, o `VERDAD`, o `PRENDER`, o `1`, no distingue entre mayúsculas y minúsculas; de lo contrario, se devuelve un código de salida distinto de cero. En el último caso, la función prueba que la variable esté configurada como `NO`, `FALSO`, `APAGAR`, o `0`, no distingue entre mayúsculas y minúsculas; imprime un mensaje de advertencia si la variable contiene algo más, es decir, basura.
+
+Tenga en cuenta que para man:sh[1] un código de salida cero significa verdadero y un código de salida distinto de cero significa falso.
+
+[IMPORTANT]
+====
+La `checkyesno` function takes a _variable name_. No pase el expandido _value_ de una variable a él; no funcionará como se esperaba.
+
+El siguiente es el uso correcto de `checkyesno`:
+
+[.programlisting]
+....
+if checkyesno mumbled_enable; then
+        foo
+fi
+....
+
+Al contrario, llamando `checkyesno` como se muestra a continuación no funcionará, al menos no como se esperaba:
+
+[.programlisting]
+....
+if checkyesno "${mumbled_enable}"; then
+        foo
+fi
+....
+
+====
+
+[[rc-flags]]Podemos afectar las banderas que se pasarán a `$command` modificando `rc_flags` en `$start_precmd`.
+
+En ciertos casos, es posible que necesitemos emitir un mensaje importante que debe ir a syslog también. Esto se puede hacer fácilmente con lo siguiente man:rc.subr[8] funciones: `debug`, `info`, `warn`, y `err`. La última función sale del script con el código especificado.
+
+Los códigos de salida de los métodos y sus pre-comandos no solo se ignoran por defecto. Si `_argument__precmd` devuelve un código de salida distinto de cero, el método principal no se ejecutará. En turno, `_argument__postcmd` no se invocará a menos que el método principal devuelva un código de salida cero.
+
+[NOTE]
+====
+sin embargo, man:rc.subr[8] se le puede indicar desde la línea de comando que ignore esos códigos de salida e invoque todos los comandos de todos modos al anteponer un argumento con `force`, como en `forcestart`.
+====
+
+[[rcng-hookup]]
+== Conectando un script al framework rc.d
+
+Una vez que se ha escrito un script, debe integrarse en [.filename]#rc.d#. El paso crucial es instalar el script en [.filename]#/etc/rc.d# (para el sistema base) o [.filename]#/usr/local/etc/rc.d# (para puertos). Ambos <[.filename]##bsd.prog.mk##> and <[.filename]##bsd.port.mk##> proporcione ganchos convenientes para eso, y por lo general no tiene que preocuparse por la propiedad y el modo adecuados. Los scripts del sistema deben instalarse desde [.filename]#src/etc/rc.d# a través de [.filename]#Makefile# encontrado allí. Los scripts de puerto se pueden instalar usando `USE_RC_SUBR` como se describe link:{porters-handbook}#rc-scripts[en el manual del portero].
+
+Sin embargo, debemos considerar de antemano el lugar de nuestro script en la secuencia de inicio del sistema. Es probable que el servicio manejado por nuestro script dependa de otros servicios. Por ejemplo, un demonio de red no puede funcionar sin las interfaces de red y el enrutamiento en funcionamiento. Incluso si un servicio parece no exigir nada, difícilmente puede iniciarse antes de que se hayan verificado y montado los sistemas de archivos básicos.
+
+Nosotros mencionamos man:rcorder[8] ya. Ahora es el momento de examinarlo de cerca. En una palabra, man:rcorder[8] toma un conjunto de archivos, examina su contenido e imprime una lista ordenada por dependencia de archivos del conjunto a `stdout`. El punto es mantener la información de dependencia _inside_ los archivos para que cada archivo pueda hablar por sí solo. Un archivo puede especificar la siguiente información:
+
+* los nombres de la "conditions" (Lo que significa servicios para nosotros) _provides_;
+* los nombres de la "conditions" it _requiere_;
+* los nombres de la "conditions" este archivo debería ejecutarse _ante_;
+* adicional _keywords_ que se puede utilizar para seleccionar un subconjunto de todo el conjunto de archivos (man:rcorder[8] puede recibir instrucciones a través de opciones para incluir u omitir los archivos que tienen palabras clave específicas enumeradas).
+
+No es de extrañar que man:rcorder[8] solo puede manejar archivos de texto con una sintaxis cercana a la de man:sh[1]. Es decir, líneas especiales entendidas por man:rcorder[8]parece man:sh[1] comentarios. La sintaxis de estas líneas especiales es bastante rígida para simplificar su procesamiento. Ver man:rcorder[8] para detalles.
+
+Además de usarman:rcorder[8] líneas especiales, un script puede insistir en su dependencia de otro servicio simplemente iniciándolo a la fuerza. Esto puede ser necesario cuando el otro servicio es opcional y no se inicia por sí solo porque el administrador del sistema lo ha desactivado por error en man:rc.conf[5].
+
+Con este conocimiento general en mente, consideremos el script demonio simple mejorado con cosas de dependencia:
+
+[.programlisting]
+....
+#!/bin/sh
+
+# PROVIDE: mumbled oldmumble 
+# REQUIRE: DAEMON cleanvar frotz
+# BEFORE:  LOGIN
+# KEYWORD: nojail shutdown
+
+. /etc/rc.subr
+
+name=mumbled
+rcvar=mumbled_enable
+
+command="/usr/sbin/${name}"
+start_precmd="${name}_prestart"
+
+mumbled_prestart()
+{
+	if ! checkyesno frotz_enable && \
+	    ! /etc/rc.d/frotz forcestatus 1>/dev/null 2>&1; then
+		force_depend frotz || return 1
+	fi
+	return 0
+}
+
+load_rc_config $name
+run_rc_command "$1"
+....
+
+Como antes, sigue un análisis detallado:
+
+Esa línea declara los nombres de "conditions" nuestro script proporciona. Ahora, otros scripts pueden registrar una dependencia de nuestro script con esos nombres.
+
+[NOTE]
+====
+Por lo general, un script especifica una sola condición proporcionada. Sin embargo, nada nos impide enumerar varias condiciones allí, por ejemplo, por razones de compatibilidad.
+
+En cualquier caso, el nombre del principal, o el único, `PROVIDE:` la condición debe ser la misma que `${name}`.
+====
+
+Entonces nuestro script indica qué "conditions" proporcionado por otros scripts de los que depende. Según las líneas, nuestro script pregunta man:rcorder[8] para ponerlo después del script(s) que proporcionan [.filename]#DAEMON# y [.filename]#cleanvar#, pero antes de eso proporcionando [.filename]#LOGIN#.
+
+[NOTE]
+====
+La `BEFORE:` No se debe abusar de la línea para evitar una lista de dependencias incompleta en el otro script. El caso apropiado para usar `ANTES:` es cuando el otro script no se preocupa por el nuestro, pero nuestro script puede hacer mejor su tarea si se ejecuta antes que el otro. Un ejemplo típico de la vida real son las interfaces de red frente al firewall: si bien las interfaces no dependen del firewall para hacer su trabajo, la seguridad del sistema se beneficiará de que el firewall esté listo antes de que haya tráfico de red.
+
+Además de las condiciones correspondientes a un solo servicio cada una, existen metacondiciones y sus "placeholder" scripts se utiliza para garantizar que ciertos grupos de operaciones se realicen antes que otros. Estos se denotan por [.filename]#UPPERCASE# nombres. Su lista y propósitos se pueden encontrar en man:rc[8].
+
+Tenga en cuenta que poner un nombre de servicio en el `REQUIERE:` line no garantiza que el servicio se esté ejecutando realmente para cuando se inicie nuestro script. El servicio requerido puede fallar al iniciarse o simplemente estar deshabilitado en man:rc.conf[5]. Obviamente, man:rcorder[8]no puede rastrear tales detalles, y man:rc[8] tampoco haré eso. En consecuencia, la aplicación iniciada por nuestro script debería poder hacer frente a cualquier servicio requerido que no esté disponible. En ciertos casos, podemos ayudarlo como se discutió <<forcedep,abajo.>>
+====
+
+[[keywords]]Como recordamos del texto anterior, man:rcorder[8] Las palabras clave se pueden utilizar para seleccionar u omitir algunos guiones. A saber, cualquiera man:rcorder[8] El consumidor puede especificar a través de `-k` y `-s` opciones qué palabras clave están en el "keep list" and "omitir lista", respectivamente. De todos los archivos que se ordenarán por dependencia, man:rcorder[8] seleccionará solo aquellos que tengan una palabra clave de la lista de conservación (a menos que estén vacíos) y que no tengan una palabra clave de la lista de omisión.
+
+En FreeBSD, man:rcorder[8] es usado por [.filename]#/etc/rc# y [.filename]#/etc/rc.shutdown#. Estos dos scripts definen la lista estándar de FreeBSD [.filename]#rc.d# palabras clave y sus significados de la siguiente manera:
+
+[[forcedep]]Para empezar,`force_depend` debe usarse con mucho cuidado. Generalmente es mejor revisar la jerarquía de variables de configuración para su [.filename]#rc.d# scripts Si ellos son interdependientes.
+
+Si todavía no puedes prescindir `force_depend`, el ejemplo ofrece un modismo de cómo invocarlo condicionalmente. En el ejemplo, nuestro `mumbled` daemon requiere que otro, `frotz`, be started in advance. However, `frotz` is optional, too; and man:rcorder[8] no sabe nada de esos detalles. Afortunadamente, nuestro script tiene acceso a todos man:rc.conf[5]variables. Si `frotz_enable` es cierto, esperamos lo mejor y confiamos en [.filename]#rc.d# haber comenzado `frotz`. De lo contrario, verificamos a la fuerza el estado de `frotz`. Finalmente, reforzamos nuestra dependencia de `frotz` si se encuentra que no se está ejecutando. Un mensaje de advertencia será emitido por `force_depend` porque solo debe invocarse si se ha detectado una configuración incorrecta.
+
+[[rcng-args]]
+== Dar más flexibilidad a un script rc.d
+
+Cuando se invoca durante el inicio o el apagado, un [.filename]#rc.d# script se supone que actúa sobre todo el subsistema del que es responsable. Ejemplo., [.filename]#/etc/rc.d/netif# debe iniciar o detener todas las interfaces de red descritas por man:rc.conf[5]. Cualquiera de las tareas se puede indicar de forma única mediante un único argumento de comando, como `start` o `stop`. Entre el inicio y el apagado, [.filename]#rc.d# Los scripts ayudan al administrador a controlar el sistema en ejecución, y es cuando surge la necesidad de mayor flexibilidad y precisión. Por ejemplo, el administrador puede querer agregar la configuración de una nueva interfaz de red aman:rc.conf[5] y luego iniciarlo sin interferir con el funcionamiento de las interfaces existentes. La próxima vez, es posible que el administrador deba cerrar una única interfaz de red. En el espíritu de la línea de comando, el respectivo [.filename]#rc.d# script pide un argumento adicional, el nombre de la interfaz.
+
+Por suerte, man:rc.subr[8] permite pasar cualquier número de argumentos a los métodos del script (dentro de los límites del sistema). Debido a eso, los cambios en el propio script pueden ser mínimos.
+
+Como puedoman:rc.subr[8] obtenga acceso a los argumentos adicionales de la línea de comandos. ¿Debería agarrarlos directamente? De ninguna manera. En primer lugar, un man:sh[1] La función no tiene acceso a los parámetros posicionales de su llamador, pero man:rc.subr[8] es solo un saco de tales funciones. En segundo lugar, la buena forma de [.filename]#rc.d# dicta que corresponde al script principal decidir qué argumentos se deben pasar a sus métodos.
+
+Entonces, el enfoque adoptado por man:rc.subr[8] es como sigue: `run_rc_command` pasa todos sus argumentos, excepto el primero, al método respectivo literalmente. El primer argumento, omitido, es el nombre del método en sí.: `start`, `stop`,etc. Será desplazado por `run_rc_command`, entonces que es `$2` en la línea de comando original se presentará como `$1` al método, y así sucesivamente.
+
+Para ilustrar esta oportunidad, modifiquemos el script ficticio primitivo para que sus mensajes dependan de los argumentos adicionales proporcionados. Aquí vamos:
+
+[.programlisting]
+....
+#!/bin/sh
+
+. /etc/rc.subr
+
+name="dummy"
+start_cmd="${name}_start"
+stop_cmd=":"
+kiss_cmd="${name}_kiss"
+extra_commands="kiss"
+
+dummy_start()
+{
+        if [ $# -gt 0 ]; then
+                echo "Greeting message: $*"
+        else
+                echo "Nothing started."
+        fi
+}
+
+dummy_kiss()
+{
+        echo -n "A ghost gives you a kiss"
+        if [ $# -gt 0 ]; then
+                echo -n " and whispers: $*"
+        fi
+        case "$*" in
+        *[.!?])
+                echo
+                ;;
+        *)
+                echo .
+                ;;
+        esac
+}
+
+load_rc_config $name
+run_rc_command "$@"
+....
+
+¿Qué cambios esenciales podemos notar en el script?
+
+Todos los argumentos que escribe después `start` pueden terminar como parámetros posicionales para el método respectivo. Podemos usarlos de cualquier manera de acuerdo con nuestra tarea, habilidades y fantasía. En el ejemplo actual, simplemente los pasamos todos aman:echo[1] como una cadena en la siguiente línea - nota `$*` entre las comillas dobles. Así es como se puede invocar el script ahora:
+
+[source,bash]
+....
+# /etc/rc.d/dummy start
+No empezó nada.
+
+# /etc/rc.d/dummy start Hello world!
+Mensaje de bienvenida: ¡Hola mundo!
+....
+
+Lo mismo se aplica a cualquier método que proporcione nuestro script, no solo a uno estándar. Hemos agregado un método personalizado llamado `kiss`, y puede aprovechar los argumentos adicionales no menos de `start` hace Ejemplo.:
+
+[source,bash]
+....
+# /etc/rc.d/dummy kiss
+Un fantasma te da un beso.
+
+# /etc/rc.d/dummy kiss Once I was Etaoin Shrdlu...
+Un fantasma te da un beso y susurra: Una vez fui Etaoin Shrdlu ...
+....
+
+Si solo queremos pasar todos los argumentos adicionales a cualquier método, simplemente podemos sustituir `"$@"` para `"$1"` en la última línea de nuestro script, donde invocamos `run_rc_command`.
+
+[IMPORTANT]
+====
+Un man:sh[1] El programador trató de comprender la sutil diferencia entre `$*` y `$@` como las formas de designar todos los parámetros posicionales. Para su discusión en profundidad, consulte un buen manual sobre man:sh[1] scripting. _no haga_ use las expresiones hasta que las entienda completamente porque su mal uso resultará en scripts con errores e inseguros.
+====
+
+[NOTE]
+====
+Actualmente `run_rc_command` puede tener un error que le impide mantener los límites originales entre argumentos. Es decir, es posible que los argumentos con espacios en blanco incrustados no se procesen correctamente. El error proviene de `$*` mal uso.
+====
+
+[[rcng-furthur]]
+== Otras lecturas
+
+[[lukem]]http://www.mewburn.net/luke/papers/rc.d.pdf[El artículo original de Luke Mewburn] ofrece una descripción general de [.filename]#rc.d# y justificación detallada de sus decisiones de diseño. Proporciona información sobre el conjunto [.filename]#rc.d# framework y su lugar en un sistema operativo BSD moderno.
+
+[[manpages]]The manual pages man:rc[8], man:rc.subr[8], and man:rcorder[8] document the [.filename]#rc.d# componentes con gran detalle. No puede utilizar completamente el [.filename]#rc.d#poder sin estudiar las páginas del manual y consultarlas mientras escribe sus propios scripts.
+
+La principal fuente de ejemplos prácticos de la vida real es [.filename]#/etc/rc.d# en un sistema en vivo. Su contenido es fácil y agradable de leer porque la mayoría de las esquinas están ocultas en el fondo. man:rc.subr[8]. Sin embargo, tenga en cuenta que el [.filename]#/etc/rc.d# scripts no fueron escritas por ángeles, por lo que podrían sufrir errores y decisiones de diseño subóptimas. ¡Ahora puedes mejorarlos!

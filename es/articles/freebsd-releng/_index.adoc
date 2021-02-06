@@ -1,0 +1,822 @@
+---
+title: Ingería de lanzamientos de FreeBSD
+authors:
+  - author: Glen Barber
+    email: gjb@FreeBSD.org
+organizations:
+  - organization: The FreeBSD Foundation
+    webpage: https://www.freebsdfoundation.org/
+  - organization: Rubicon Communications, LLC (Netgate)
+    webpage: https://www.netgate.com/
+trademarks: ["freebsd", "intel", "general"]
+---
+
+= Ingería de lanzamientos de FreeBSD
+:doctype: article
+:toc: macro
+:toclevels: 1
+:icons: font
+:sectnums:
+:sectnumlevels: 6
+:source-highlighter: rouge
+:experimental:
+
+[.abstract-title]
+Resumen
+
+Este artículo describe el proceso detrás del modelo de ingeniería de lanzamientos adoptado por el proyecto FreeBSD.
+
+'''
+
+toc::[]
+
+[[introduction]]
+== Introducción al proceso de ingeniería de lanzamientos de FreeBSD
+
+El desarrollo de FreeBSD tiene un flujo de trabajo muy específico. En general, se realiza el commit de todos los cambios en el sistema base de FreeBSD a la rama `head/`, la cual refleja los últimos cambios en el árbol del código fuente.
+
+Después de un período de prueba razonable, los cambios se pueden fusionar en la rama `stable/`. El plazo mínimo de tiempo predeterminado antes de fusionar los cambios en la rama `stable/` es de tres (3) días.
+
+Aunque es una regla general esperar un mínimo de tres (3) días antes de fusionar el código desde la rama `head/`, hay algunas circunstancias especiales en las que se puede requerir una fusión inmediata, como una corrección de seguridad crítica, o una corrección de errores que limite directamente el proceso de compilación de la versión.
+
+Después de unos meses, cuando el número de cambios en la rama `stable/` ha crecido significativamente, es hora de lanzar la próxima versión de FreeBSD. Estos lanzamientos se han denominado históricamente lanzamientos "point".
+
+Entre el lanzamiento de la rama `stable/`, aproximadamente cada dos (2) años, se creará un lanzamiento directamente desde la rama `head/`. Históricamente, estos lanzamientos se han denominado "dot-zero".
+
+Este artículo destacará el flujo de trabajo y las responsabilidades del equipo de ingeniería de lanzamientos de FreeBSD para los lanzamientos "dot-zero" y "point".
+
+Las siguientes secciones de este artículo describen:
+
+<<releng-prep>>::
+Información general y preparación antes de comenzar el ciclo de lanzamiento.
+
+<<releng-website>>::
+Cambios en el sitio web durante el ciclo de liberación
+
+<<releng-terms>>::
+La terminología y la información general, como "code slush" y "code freeze", usadas en este documento.
+
+<<releng-head>>::
+El proceso de ingeniería de lanzamientos para un lanzamiento "dot-zero".
+
+<<releng-stable>>::
+El proceso de ingeniería de lanzamientos para un lanzamiento "point".
+
+<<releng-building>>::
+Información relacionada con los procedimientos específicos para construir el medio de instalación.
+
+<<releng-mirrors>>::
+Procedimientos para publicar un medio de instalación.
+
+<<releng-wrapup>>::
+Terminando el ciclo de lanzamiento.
+
+[[releng-prep]]
+== Información general y preparación
+
+Aproximadamente dos meses antes del inicio del ciclo de lanzamiento, el equipo de ingeniería de lanzamientos de FreeBSD decide un programa para el lanzamiento. El programa incluye varios hitos en el ciclo de lanzamiento, como fechas de freeze, fechas para las ramas y fechas de compilación del código. Por ejemplo:
+
+[.informaltable]
+[cols="1,1", frame="none", options="header"]
+|===
+| Milestone
+| Fecha prevista
+
+
+|`head/` slush:
+|27 mayo, 2016
+
+|`head/` freeze:
+|10 junio, 2016
+
+|`head/` KBI freeze:
+|24 junio, 2016
+
+|`doc/` tree slush [1]:
+|24 junio, 2016
+
+|Rama trimestral de los ports [2]:
+|1 julio, 2016
+
+|Rama `stable/_12_/`:
+|8 julio, 2016
+
+|`doc/` tree tag [3]:
+|8 julio, 2016
+
+|Empieza la compilación de la BETA1:
+|8 julio, 2016
+
+|`head/` thaw:
+|9 julio, 2016
+
+|Empieza la compilación de la BETA2:
+|15 julio, 2016
+
+|Empieza la compilación de la BETA3 [*]:
+|22 julio, 2016
+
+|rama `releng/_12.0_/`:
+|29 julio, 2016
+
+|Empieza la compilación de la RC1:
+|29 julio, 2016
+
+|`stable/_12_/` thaw:
+|20 julio, 2016
+
+|Empieza la compilación de la RC2:
+|5 agosto, 2016
+
+|Última compilación de los ports [4]:
+|6 agosto, 2016
+
+|Etiqueta de liberación de puertos:
+|12 agosto, 2016
+
+|Empieza la compilación de la RC3 [*]:
+|12 agosto, 2016
+
+|Empieza la compilación de la RELEASE:
+|19 agosto, 2016
+
+|Anuncio de liberación:
+|2 septiembre, 2016
+|===
+
+[NOTE]
+====
+Los elementos marcados con "[*]" identifican los pasos realizados solo "cuando sean necesarios".
+====
+
+. La congelación del árbol de `doc/` está coordinada por el equipo de ingeniería de documentación de FreeBSD.
+. La rama trimestral del árbol de ports se determina en el momento en que se planifica la compilación final de la fase de `RC`. Se crea una nueva rama trimestral el primer día del trimestre, por lo que esta métrica se debe utilizar al tener en cuenta los hitos del ciclo de lanzamiento. El equipo de gestión de ports de FreeBSD crea una rama trimestral.
+. El equipo de ingeniería de documentación de FreeBSD crea el tag del árbol de `doc/`.
+. El equipo de gestión de ports de FreeBSD realiza la compilación final de los ports después de la compilación final (o la fase que sea la final) de la fase `RC`.
+
+[NOTE]
+====
+Si la versión se está creando desde la rama `stable/`, la fecha de congelación de KBI puede ser excluida, ya que se considera que KBI está congelado en la rama `stable/`.
+====
+
+Al escribir el programa del ciclo de lanzamientos, se deben tener en cuenta varias cosas, en particular, los hitos en los que la fecha objetivo depende de los hitos predefinidos de los que exista una dependencia. Por ejemplo, la tag de la colección de ports se obtiene de la rama trimestral que esté activa en el momento de la última fase `RC`. Esto, en parte, define qué rama trimestral se usa, cuándo se puede realizar el tag y qué revisión del árbol de ports se usa para la compilación final de `RELEASE`.
+
+Después de un acuerdo general del programa, el equipo de ingeniería de lanzamientos de FreeBSD envía el programa por correo electrónico a los desarrolladores de FreeBSD.
+
+Es normal que muchos desarrolladores informen al equipo de lanzamientos de FreeBSD sobre varios trabajos en proceso. En algunos casos, se solicitará una extensión del trabajo que haya en proceso, y en otros casos, se solicitará una "blanket approval" para un subconjunto específico del árbol.
+
+Cuando se hacen tales solicitudes, es importante asegurarse de que se discutan los plazos (incluso si se estiman). Para las aprobaciones generales, el período de tiempo para la aprobación general debe quedar claro. Por ejemplo, un desarrollador de FreeBSD puede solicitar una aprobación general desde el principio del slush del código hasta el inicio de la compilación de la `RC`.
+
+[NOTE]
+====
+Para realizar un seguimiento de las aprobaciones generales, el equipo de ingeniería de lanzamientos de FreeBSD utiliza un repositorio interno para mantener un registro de las solicitudes, que define el área sobre la cual se ha otorgado la aprobación general, el autor/es, en qué momento expira la aprobación general y la razón por la que se otorgó la aprobación. Un ejemplo es otorgar una aprobación general a [.filename]#release/doc/# a todos los miembros del equipo de ingeniería de lanzamientos de FreeBSD hasta la `RC` final para actualizar las notas de la versión y otra documentación relacionada con la versión.
+====
+
+[NOTE]
+====
+El equipo de ingeniería de lanzamientos de FreeBSD también utiliza este repositorio para rastrear las solicitudes de aprobación pendientes que se reciben justo antes de empezar el ciclo de compilaciones del lanzamiento, que el ingeniero de lanzamientos especifica el período límite con un correo electrónico a los desarrolladores de FreeBSD.
+====
+
+Dependiendo del conjunto de código en cuestión, y el impacto general que el conjunto de código tiene en FreeBSD en su conjunto, el equipo de ingeniería de lanzamientos de FreeBSD puede aprobar o denegar dichas solicitudes.
+
+Lo mismo se aplica al trabajo que haya en progreso. Por ejemplo, en el caso del desarrollo de un nuevo driver, el cual está aislado del resto del árbol del código fuente, podría tener una extensión de tiempo. Sin embargo, en el caso de un nuevo scheduler, puede no ser viable, en especial si los cambios no están en otra rama.
+
+El programa también se añade a la web del proyecto, en el repositorio `doc/`, en [.filename]#head/en_US.ISO8859-1/htdocs/releases/12.0R/schedule.xml#. Este archivo se actualiza continuamente a medida que avanza el ciclo del lanzamiento.
+
+[NOTE]
+====
+En la mayoría de los casos, se puede copiar el archivo [.filename]#schedule.xml# de una versión anterior y actualizarse.
+====
+
+Además de añadir el archivo [.filename]#schedule.xml# a la web, también se actualizarán los archivos [.filename]#head/share/xml/navibar.ent# y [.filename]#head/share/xml/release.ent# para añadir el enlace a la programación en varias subpáginas, así como habilitar el enlace a la programación en la página index de la web del proyecto.
+
+También se enlaza a la programación desde el archivo [.filename]#head/en_US.ISO8859-1/htdocs/releng/index.xml#.
+
+Aproximadamente un mes antes del "code slush", el equipo de ingeniería de lanzamientos de FreeBSD envía un correo electrónico de recordatorio a los desarrolladores de FreeBSD.
+
+Una vez que las primeras compilaciones del ciclo de lanzamientos estén disponibles, actualice la entidad `beta.local.where` en el archivo [.filename]#head/en_US.ISO8859-1/htdocs/releases/12.0R/schedule.xml# reemplazando `IGNORE` con `INCLUDE`.
+
+[NOTE]
+====
+Si se producen dos ciclos de liberación paralelos, se puede utilizar en su lugar la entidad `beta2.local.where`.
+====
+
+[[releng-terms]]
+== Terminología de la ingeniería de lanzamientos
+
+Esta sección describe parte de la terminología utilizada en el resto de este documento.
+
+[[releng-terms-code-slush]]
+=== El code slush
+
+Aunque el code slush no es una congelación obligatoria del árbol del código fuente, el equipo de ingeniería de lanzamientos de FreeBSD solicita que los errores existentes en el código base tengan prioridad sobre la implementación de nuevas características.
+
+El code slush no impone aprobaciones en los commits a la rama.
+
+[[releng-terms-code-freeze]]
+=== La congelación del código
+
+La congelación del código marca el momento en el que todos los commits a la rama requieren de la aprobación explícita del equipo de ingeniería de lanzamientos de FreeBSD.
+
+El repositorio de Subversion de FreeBSD tiene varios hooks para realizar comprobaciones de integridad antes de que se haga cualquier commit al árbol del código fuente. Uno de esos hooks evaluará si realizar el commit a una rama en particular requiere de aprobación específica.
+
+Para hacer que se cumpla las aprobaciones de los commits, el equipo de ingeniería de lanzamientos de FreeBSD actualiza el archivo [.filename]#base/svnadmin/conf/approvers#, y realiza el commit del cambio en el repositorio. Una vez hecho esto, cualquier cambio en la rama debe incluir la línea "Approved by:" en el mensaje del commit.
+
+La línea "Approved by:" debe coincidir con la segunda columna del archivo [.filename]#base/svnadmin/conf/approvers#, de lo contrario, el commit será rechazado por los hooks del repositorio.
+
+[NOTE]
+====
+Durante la congelación del código, se recomienda a los committers de FreeBSD que sigan el https://wiki.freebsd.org/Releng/ChangeRequestGuidelines[Change Request Guidelines].
+====
+
+[[releng-terms-kbi-freeze]]
+=== La congelación de KBI/KPI
+
+La estabilidad de KBI/KPI implica que llamar a una función a través de dos versiones de software diferentes den el mismo resultado. Quien llama, ya sea un proceso, un subproceso o una función, espera que la función se comporte de cierta forma, de lo contrario, la estabilidad de KBI/KPI en la rama se ve afectada.
+
+[[releng-website]]
+== Cambios en el sitio web durante el ciclo de liberación
+
+Esta sección describe los cambios que deberían de ocurrir en la web a medida que avanza el ciclo de lanzamiento.
+
+[NOTE]
+====
+Los archivos especificados en esta sección son relativos a la rama `head/` del repositorio `doc` en Subversion.
+====
+
+[[releng-website-prerelease]]
+=== Cambios en la web antes de que empiece el ciclo de lanzamiento
+
+Cuando el programa del ciclo de lanzamientos está disponible, estos archivos deben actualizarse para habilitar varias funcionalidades diferentes en la web del proyecto FreeBSD:
+
+[.informaltable]
+[cols="1,1", frame="none", options="header"]
+|===
+| Archivo a editar
+| Qué cambiar
+
+
+|[.filename]#share/xml/release.ent#
+|Cambie `beta.upcoming` de `IGNORE` a `INCLUDE`
+
+|[.filename]#share/xml/release.ent#
+|Cambie `%beta.upcoming` de `IGNORE` a `INCLUDE`
+
+|[.filename]#share/xml/release.ent#
+|Cambie `beta.testing` de `IGNORE` a `INCLUDE`
+
+|[.filename]#share/xml/release.ent#
+|Cambie `% beta.testing` de `IGNORE` a `INCLUDE`
+|===
+
+[[releng-website-beta-rc]]
+=== Cambios en la web durante la fase `BETA` o `RC`
+
+Al realizar la transición de la fase `PRERELEASE` a `BETA`, entos archivos deben actualizarse para habilitar el bloque "Help Test" en la página de descarga. Todos los archivos son relativos a [.filename]#head/# en el repositorio `doc`:
+
+[.informaltable]
+[cols="1,1", frame="none", options="header"]
+|===
+| Archivo a editar
+| Qué cambiar
+
+
+|[.filename]#en_US.ISO8859-1/htdocs/releases/12.0R/schedule.xml#
+|Cambie `%{nbsp}beta.local.where``IGNORE` a `INCLUDE`
+
+|[.filename]#share/xml/release.ent#
+|Actualice `%{nbsp}betarel.vers` a `BETA_1_`
+
+|[.filename]#share/xml/news.xml#
+|Añada una entrada anunciando la `BETA`
+
+|[.filename]#en_US.ISO8859-1/htdocs/security/advisory-template.txt#
+|Añade la nueva `BETA`, `RC`, o `RELEASE` final a la plantilla
+
+|[.filename]#en_US.ISO8859-1/htdocs/security/errata-template.txt#
+|Añade la nueva `BETA`, `RC`, o `RELEASE` final a la plantilla
+|===
+
+Una vez que ha creado la rama `releng/_12.0_/`, los diversos documentos relacionados con la versión deben generarse y añadirse manualmente al repositorio `doc/`.
+
+Dentro de [.filename]#release/doc#, ejecute el comando man:make[1] para generar las páginas [.filename]#errata.html#, [.filename]#hardware.html#, [.filename]#readme.html# y [.filename]#relnotes.html#, los cuales, luego se añadiran a [.filename]#doc/head/en_US.ISO8859-1/htdocs/releases/X.YR/#, donde _X.Y_ representa la versión principal y la versión menor del lanzamiento.
+
+La función `fbsd:nokeywords` debe tener el valor `on` en los archivos recién añadidos antes de que los pre-commit hooks permitan añadirlos al repositorio.
+
+[NOTE]
+====
+Los documentos relevantes relacionados con la liberación existen en el repositorio [.filename]#doc# para FreeBSD 12.x y posteriores.
+====
+
+[[releng-ports-beta-rc]]
+=== Cambios en los ports durante las fases `BETA`, `RC` y la `RELEASE` final
+
+Durante el ciclo de lanzamientos, para cada compilación, los archivos `MANIFEST` que contienen el `SHA256` de varios distribution sets, como `base.txz`, `kernel.txz`, etc..., se añaden al port package:misc/freebsd-release-manifests[]. Esto permite que otras utilidades que no sean man:bsdinstall[8], como package:ports-mgmt/poudriere[], utilicen de manera segura estos distribution sets, al proporcionar un mecanismo a través del cual se pueden verificar los checksums.
+
+[[releng-head]]
+== Lanzamientos desde la rama `head/`
+
+Esta sección describe los procedimientos generales del ciclo de lanzamientos de FreeBSD desde la rama `head/`.
+
+[[releng-head-builds-alpha]]
+=== Compilaciones de la fase "`ALPHA`" de FreeBSD
+
+Empezando con el ciclo de FreeBSD 10.0-RELEASE, se introdujo la noción de la fase "`ALPHA`" en las compilaciones. A diferencia de las fases `BETA` y `RC`, la fase `ALPHA` no está incluida en el cronograma de lanzamientos de FreeBSD.
+
+La idea detrás de la fase `ALPHA` es proporcionar compilaciones de FreeBSD de forma regular antes de la creación de la rama `stable/`.
+
+Las snapshots de la fase `ALPHA` de FreeBSD deben compilarse aproximadamente una vez a la semana.
+
+Para la primera compilación de la fase `ALPHA`, el valor de `BRANCH` en el archivo [.filename]#sys/conf/newvers.sh# debe cambiarse de `CURRENT` a `ALPHA1`. Para posteriores compilaciones de la fase `ALPHA`, incremente el valor de `ALPHA_N_` en uno.
+
+Consulte la <<releng-building>> para obtener información sobre cómo crear las imágenes de la fase `ALPHA`.
+
+[[releng-head-branching]]
+=== Crear la rama `stable/_12_/`
+
+Al crear la rama `stable/`, se requieren varios cambios, tanto en la nueva rama `stable/` como en la rama `head/`. Los archivos que se indican aquí son relativos a la raíz del repositorio. Para crear la nueva rama `stable/_12_/` en Subversion, ejecute el siguiente comando:
+
+[source,bash]
+....
+% svn cp ^/head stable/12/
+....
+
+Una vez que se ha creado la rama `stable/_12_/`, realice los siguientes cambios:
+
+[.informaltable]
+[cols="1,1", frame="none", options="header"]
+|===
+| Archivo a editar
+| Qué cambiar
+
+
+|[.filename]#stable/12/UPDATING#
+|Actualice la versión de FreeBSD y elimine el aviso sobre `WITNESS`
+
+|[.filename]#stable/12/contrib/jemalloc/include/jemalloc/jemalloc_FreeBSD.h#
+|
+
+[source,bash]
+....
+....
+
+|[.filename]#stable/12/lib/clang/llvm.build.mk#
+|Descomente `-DNDEBUG`
+
+|[.filename]#stable/12/sys/*/conf/GENERIC*#
+|Eliminar el soporte de debug
+
+|[.filename]#stable/12/sys/*/conf/MINIMAL#
+|Eliminar el soporte de debug
+
+|[.filename]#stable/12/release/release.conf.sample#
+|Actualizar `SRCBRANCH`
+
+|[.filename]#stable/12/sys/*/conf/GENERIC-NODEBUG#
+|Eliminar estas configuraciones del kernel
+
+|[.filename]#stable/12/sys/arm/conf/std.arm*#
+|Eliminar las opciones de debug
+
+|[.filename]#stable/12/sys/conf/newvers.sh#
+|Actualice el valor de `BRANCH` para reflejar la fase de `BETA1`
+
+|[.filename]#stable/12/share/mk/src.opts.mk#
+|Mueva `REPRODUCIBLE_BUILD` desde `__DEFAULT_NO_OPTIONS` a `__DEFAULT_YES_OPTIONS`
+
+|[.filename]#stable/12/share/mk/src.opts.mk#
+|Mueva `LLVM_ASSERTIONS` desde `__DEFAULT_YES_OPTIONS` a `__DEFAULT_NO_OPTIONS` (FreeBSD 13.x y posteriores solamente)
+
+|[.filename]#stable/12/libexec/rc/rc.conf#
+|Establezca `dumpdev` de `AUTO` a `NO` (es configurable a través de man:bsdinstall[8] para aquellos que lo deseen habilitado por defecto)
+
+|[.filename]#stable/12/release/Makefile#
+|Elimine las entradas `debug.witness.trace`
+|===
+
+Después, en la rama `head/`, la cual ahora pasará a ser una nueva versión principal:
+
+[.informaltable]
+[cols="1,1", frame="none", options="header"]
+|===
+| Archivo a editar
+| Qué cambiar
+
+
+|[.filename]#head/UPDATING#
+|Actualice la versión de FreeBSD
+
+|[.filename]#head/sys/conf/newvers.sh#
+|Actualice el valor de `BRANCH` para reflejar `CURRENT`, e incremente `REVISION`
+
+|[.filename]#head/Makefile.inc1#
+|Actualice `TARGET_TRIPLE` y `MACHINE_TRIPLE`
+
+|[.filename]#head/sys/sys/param.h#
+|Actualice `__FreeBSD_version`
+
+|[.filename]#head/gnu/usr.bin/cc/cc_tools/freebsd-native.h#
+|Actualice `FBSD_MAJOR` y `FBSD_CC_VER`
+
+|[.filename]#head/contrib/gcc/config.gcc#
+|Incluya el header `freebsd<version>.h`
+
+|[.filename]#head/lib/clang/llvm.build.mk#
+|Actualice el valor de `OS_VERSION`
+
+|[.filename]#head/lib/clang/freebsd_cc_version.h#
+|Actualice `FREEBSD_CC_VERSION`
+
+|[.filename]#head/lib/clang/include/lld/Common/Version.inc#
+|Actualice `LLD_REVISION_STRING`
+
+|[.filename]#head/Makefile.libcompat#
+|Actualice `LILB32CPUFLAGS`
+|===
+
+[[releng-stable]]
+== Lanzamientos desde la rama `stable/`
+
+Esta sección describe los procedimientos generales del ciclo de lanzamientos de FreeBSD desde la rama `stable/`.
+
+[[releng-stable-slush]]
+=== Code Slush de la rama `stable` de FreeBSD
+
+En preparación para la congelación del código en una rama `estable`, varios archivos deben ser actualizados para reflejar que el ciclo de liberación está oficialmente en curso. Estos archivos son todos relativos al nivel más alto de la rama estable:
+
+[.informaltable]
+[cols="1,1", frame="none", options="header"]
+|===
+| Archivo a editar
+| Qué cambiar
+
+
+|[.filename]#sys/conf/newvers.sh#
+|Actualice el valor de `BRANCH` a `PRERELEASE`
+
+|[.filename]#Makefile.inc1#
+|Actualice `TARGET_TRIPLE`
+
+|[.filename]#lib/clang/llvm.build.mk#
+|Actualice `OS_VERSION`
+
+|[.filename]#Makefile.libcompat#
+|Actualice `LIB32CPUFLAGS`
+
+|[.filename]#gnu/usr.bin/groff/tmac/mdoc.local.in#
+|Añada una nueva entrada `.ds` para la versión de FreeBSD y actualice `doc-default-operating-system` (solo para FreeBSD 11.x y versiones anteriores)
+|===
+
+En el repositorio de `doc`, actualice también el archivo [.filename]#head/en_US.ISO8859-1/htdocs/releases/12.0R/Makefile.hardware#, cambiando el valor de `_BRANCH` a `BETA_X_`, `RC_X_`, o `RELEASE`, respectivamente.
+
+[[releng-stable-builds-beta]]
+=== Compilaciones de la fase `BETA` de FreeBSD
+
+Después del code slush, la siguiente fase del ciclo de lanzamientos es la congelación del código. Este es el punto en el que todos los commits a la rama stable requieren la aprobación explícita del equipo de ingeniería de lanzamientos de FreeBSD. Esto se aplica mediante pre-commit hooks en el repositorio de Subversion, editando [.filename]#base/svnadmin/conf/approvers# para incluir una expresión regular que coincida con la rama `stable/_12_/` para el lanzamiento:
+
+[.programlisting]
+....
+^/stable/12/	re
+^/releng/12.0/	re
+....
+
+[NOTE]
+====
+Hay dos excepciones, las cuales no requieren la aprobación del commit. La primera es cualquier cambio que deba realizar el ingeniero de lanzamientos para continuar con el flujo de trabajo diario del ciclo de lanzamientos, y el segundo, son las correcciones de errores de seguridad que puedan ocurrir durante el ciclo de lanzamientos.
+====
+
+Cuando la congelación del código es efectiva, la próxima compilación de la rama se etiqueta como `BETA1`. Esto se realiza actualizando el valor de `BRANCH` en [.filename]#sys/conf/newvers.sh# de `PRERELEASE` a `BETA1`.
+
+Una vez hecho esto, se inicia el primer conjunto de compilaciones de la fase `BETA`. Las compilaciones de la fase `BETA` posteriores no requieren de la actualización de ningún archivo que no sea [.filename]#sys/conf/newvers.sh#, en el cual habrá que aumentar el número de compilación de la fase `BETA`.
+
+[[releng-stable-branching]]
+=== Crear la rama `releng/_12.0_/`
+
+Cuando la primera compilación de la fase `RC` (Release Candidate) está lista para empezar, se crea la rama `releng/`. Este proceso tiene varios pasos, que deben realizarse en un orden específico, para evitar problemas como duplicidades con los valores de `__FreeBSD_version`, por ejemplo. Las rutas que se enumeran a continuación son relativasa la raíz del repositorio. El orden de los commits y qué hay que modificar es:
+
+[source,bash]
+....
+% svn cp ^/stable/12/ releng/12.0/
+....
+
+[.informaltable]
+[cols="1,1", frame="none", options="header"]
+|===
+| Archivo a editar
+| Qué cambiar
+
+
+|[.filename]#releng/12.0/sys/conf/newvers.sh#
+|Cambie `BETA_X_` a `RC1`
+
+|[.filename]#releng/12.0/sys/sys/param.h#
+|Actualice `__FreeBSD_version`
+
+|[.filename]#releng/12.0/etc/pkg/FreeBSD.conf#
+|Reemplace `latest` por `quarterly` como la ubicación predeterminada del repositorio de paquetes
+
+|[.filename]#releng/12.0/release/pkg_repos/release-dvd.conf#
+|Reemplace `latest` por `quarterly` como la ubicación predeterminada del repositorio de paquetes
+
+|[.filename]#stable/12/sys/conf/newvers.sh#
+|Actualice `BETA_X_` por `PRERELEASE`
+
+|[.filename]#stable/12/sys/sys/param.h#
+|Actualice `__FreeBSD_version`
+
+|[.filename]#svnadmin/conf/approvers#
+|Añada una nueva línea de approvers para la rama releng de la misma forma que se hizo para la rama estable
+|===
+
+[source,bash]
+....
+% svn propdel -R svn:mergeinfo releng/12.0/
+% svn commit releng/12.0/
+% svn commit stable/12/
+....
+
+Ahora que existen dos nuevos valores de la `versión __FreeBSD_`, también actualizamos [.filename]#head/es_US.ISO8859-1/books/porters-handbook/versions/chapter.xml# en el repositorio del Proyecto de Documentación.
+
+Después de que la primera construcción de `RC` haya sido completada y probada, la rama `stable/` puede ser "desactivado" eliminando (o comentando) la entrada ^/`stable/_12_/` en [.filename]#svnadmin/conf/approvers#.
+
+Después de la disponibilidad del primer `RC`, el Equipo de Bugmeister de FreeBSD debería ser enviado por correo electrónico para añadir el nuevo FreeBSD `-RELEASE` a las `versiones` disponibles en el menú desplegable que se muestra en el rastreador de errores.
+
+[[releng-building]]
+== Construir los medios de instalación de FreeBSD
+
+Esta sección describe los procedimientos generales que producen instantáneas y versiones del desarrollo de FreeBSD.
+
+[[releng-build-scripts]]
+=== Liberar los Scripts de construcción
+
+Esta sección describe los "scripts" de compilación utilizados por el Equipo de Ingeniería de Liberaciones de FreeBSD para producir instantáneas de desarrollo y liberaciones.
+
+[[releng-build-scripts-single]]
+==== El Script de [.filename]#release.sh#
+
+Antes de FreeBSD 9.0-RELEASE, [.filename]#src/release/Makefile# fue actualizado para soportar man:bsdinstall[8], y el [.filename]#src/release/generate-release. sh# se introdujo como un envoltorio para automatizar la invocación de los objetivos de man:release[7].
+
+Antes de FreeBSD 9.2-RELEASE, se introdujo [.filename]#src/release/release.sh#, que basado en gran medida en [.filename]#src/release/generate-release.sh# incluía soporte para especificar archivos de configuración para anular varias opciones y variables de entorno. El soporte para los archivos de configuración proporcionaba soporte para construir de forma cruzada cada arquitectura para una versión especificando un archivo de configuración separado para cada invocación.
+
+Como un breve ejemplo del uso de [.filename]#src/release/release.sh# para construir una única liberación en [.filename]#/scratch#:
+
+[source,bash]
+....
+# /bin/sh /usr/src/release/release.sh
+....
+
+Como breve ejemplo del uso de [.filename]#src/release/release.sh# para construir una única versión cruzada utilizando un directorio de destino diferente, cree un [.filename]#release.conf# personalizado que contenga:
+
+[.programlisting]
+....
+# release.sh configuration for powerpc/powerpc64
+CHROOTDIR="/scratch-powerpc64"
+TARGET="powerpc"
+TARGET_ARCH="powerpc64"
+KERNEL="GENERIC64"
+....
+
+Entonces invoca [.filename]#src/release/release.sh# como::
+
+[source,bash]
+....
+# /bin/sh /usr/src/release/release.sh -c $HOME/release.conf
+....
+
+Ver man:release[7] y [.filename]#src/release/release.conf.sample# para más detalles y ejemplos de uso.
+
+[[releng-build-scripts-multiple]]
+==== El Script de Envoltura [.filename]#thermite.sh#
+
+Para que la construcción cruzada del conjunto completo de arquitecturas soportadas en una rama determinada sea más rápida y fácil, y para reducir los factores de error humano, se escribió un script de envoltura alrededor de [.filename]#src/release/release.sh# para iterar a través de las diversas combinaciones de arquitecturas e invocar [.filename]#src/release/release.sh# utilizando un archivo de configuración específico para esa arquitectura.
+
+El script de envoltura se llama [.filename]#thermite.sh#, que está disponible en el repositorio de Subversión de FreeBSD en `svn://svn.freebsd.org/base/user/gjb/thermite/`, además de los archivos de configuración utilizados para construir `head/` y `stable/_12_/` development snapshots.
+
+Usando [.filename]#thermite.sh# está cubierto en <<releng-build-snapshot>> y <<releng-build-release>>.
+
+Cada arquitectura y kernel individual tiene su propio archivo de configuración usado por [.filename]#release.sh#. Cada rama tiene su propia configuración [.filename]#defaults-X.conf#, que contiene entradas comunes en cada arquitectura, donde se establecen y/o anulan las anulaciones o variables especiales en los archivos por construcción.
+
+El esquema de nomenclatura de los archivos de configuración de cada edificio es en forma de [.filename]#${revision}-${TARGET_ARCH}-${KERNCONF}-${type}. conf#, donde las variables en mayúsculas son equivalentes a lo que man:make[1] utiliza en el sistema de construcción, y las variables en minúsculas se establecen dentro de los archivos de configuración, mapeando a la versión mayor de la rama respectiva.
+
+Cada rama también tiene su propia configuración [.filename]#builds-X.conf#, que es usada por [.filename]#thermite.sh#. El script [.filename]#thermite.sh# itera a través de cada valor ${revision}, ${TARGET_ARCH}, ${KERNCONF}, y ${type}, creando una lista maestra de lo que hay que construir. Sin embargo, una determinada combinación de la lista sólo se construirá si existe el respectivo archivo de configuración, que es donde el esquema de denominación anterior es relevante.
+
+Hay dos caminos para la obtención de archivos:
+
+* [.filename]#builds-12.conf# -> [.filename]#main.conf#
++ 
+Esto controla [.filename]#thermite.sh# el comando
+* [.filename]#12-amd64-GENERIC-snap.conf# -> [.filename]#defaults-12.conf# -> [.filename]#main.conf#
++ 
+Esto controla [.filename]#release/release.sh# el comando dentro de la construcción man:chroot[8]
+
+[NOTE]
+====
+Los archivos de configuración [.filename]#builds-12.conf#, [.filename]#defaults-12.conf# y [.filename]#main.conf# existen para reducir la repetición entre los diversos archivos de cada construcción.
+====
+
+[[releng-build-snapshot]]
+=== Construyendo instantáneas del desarrollo de FreeBSD
+
+Las máquinas de construcción de la versión oficial tienen un diseño de sistema de archivos específico, que usando ZFS, [.filename]#thermite.sh# se aprovecha mucho con los clones y las instantáneas, asegurando un ambiente de construcción prístino.
+
+Los scripts de compilación residen en [.filename]#/releng/scripts-snapshot/scripts# o [.filename]#/releng/scripts-release/scripts# respectivamente, para evitar colisiones entre una `RC` compilación de una rama releng frente a una `STABLE` instantánea de la respectiva rama estable.
+
+Existe un conjunto de datos separado para las imágenes de la construcción final, [.filename]#/snap/ftp#. Este directorio contiene tanto los directorios de instantáneas como los de versiones. Sólo se usan si la variable `EVERYTHINGISFINE` está definida en [.filename]#main.conf#.
+
+[NOTE]
+====
+El nombre de la variable `EVERYTHINGISFINE` fue elegido para evitar colisionar con una variable que podría ser posiblemente establecida en el entorno del usuario, permitiendo accidentalmente el comportamiento que depende de ella ser definida.
+====
+
+As [.filename]#thermite.sh# iterates through the master list of combinations and locates the per-build configuration file, a ZFS dataset is created under [.filename]#/releng#, such as [.filename]#/releng/12-amd64-GENERIC-snap#. The `src/`, `ports/`, and `doc/` trees are checked out to separate ZFS datasets, such as [.filename]#/releng/12-src-snap#, which are then cloned and mounted into the respective build datasets. This is done to avoid checking out a given tree more than once.
+
+Asumiendo estas rutas de sistemas de archivos, [.filename]#thermite.sh# sería invocado como:
+
+[source,bash]
+....
+# cd /releng/scripts-snapshot/scripts
+# ./setrev.sh -b stable/12/
+# ./zfs-cleanup.sh -c ./builds-12.conf
+# ./thermite.sh -c ./builds-12.conf
+....
+
+Una vez que se han completado las compilaciones, se dispone de guiones auxiliares adicionales para generar correos electrónicos de instantáneas de desarrollo que se envían a la lista de correo `freebsd-snapshots@freebsd.org`:
+
+[source,bash]
+....
+# cd /releng/scripts-snapshot/scripts
+# ./get-checksums.sh -c ./builds-12.conf | ./generate-email.pl > snapshot-12-mail
+....
+
+[NOTE]
+====
+La salida generada debe ser verificada dos veces para comprobar que es correcta, y el correo electrónico en sí debe ser firmado mediante PGP, en línea.
+====
+
+[NOTE]
+====
+Estos scripts de ayuda sólo se aplican a las compilaciones de instantáneas de desarrollo. Los anuncios durante el ciclo de lanzamiento (excluyendo el anuncio de lanzamiento final) se crean a partir de una plantilla de correo electrónico. Una muestra de la plantilla de correo electrónico utilizada actualmente se puede encontrar https://svn.freebsd.org/base/user/gjb/thermite/non-release-template-mail.txt[aquí].
+====
+
+[[releng-build-release]]
+=== Construyendo versiones de FreeBSD
+
+De manera similar a la compilación de instantáneas de desarrollo de FreeBSD, [.filename]#thermite.sh# sería invocado de la misma manera. La diferencia entre las instantáneas de desarrollo y las construcciones de versiones, `BETA` y `RC` incluida, es que los archivos de configuración man:chroot[8] deben ser nombrados con `release` en lugar de `snap` como el "tipo", como se mencionó anteriormente.
+
+Además, el `BUILDTYPE` y `types` deben ser cambiados de `snap` a `release` en [.filename]#default-12.conf# y [.filename]#builds-12.conf#, respectivamente.
+
+Cuando se construye `BETA`, `RC`, y el final `RELEASE`, también se establece estáticamente `BUILDSVNREV` a la revisión en la rama que refleja el cambio de nombre, `BUILDDATE` a la fecha en que las construcciones se inician en formato `YYYYMMDD`. Si los árboles `doc/` y `ports/` han sido etiquetados, también establezca `PORTBRANCH` y `DOCBRANCH` a la ruta de etiqueta relevante en el repositorio de Subversion, reemplazando `HEAD` con la última revisión cambiada. También establecer `releasesrc` en in [.filename]#builds-12.conf# a la rama relevante, como `stable/_12_/` o `releng/_12.0_/`.
+
+Durante el ciclo de liberación, una copia de [.filename]#CHECKSUM.SHA512# y [.filename]#CHECKSUM.SHA256# para cada arquitectura se almacenan en el repositorio interno del Equipo de Ingeniería de Liberación de FreeBSD además de ser incluidas en los diversos correos electrónicos de anuncio. Cada [.filename]#MANIFEST# que contiene los hashes de [.filename]#base.txz#, [.filename]#kernel.txz#, etc. se añaden también a package:misc/freebsd-release-manifests[] en la Colección de Ports.
+
+En preparación para la construcción de la liberación, varios archivos necesitan ser actualizados:
+
+[.informaltable]
+[cols="1,1", frame="none", options="header"]
+|===
+| Archivo a editar
+| Qué cambiar
+
+
+|[.filename]#sys/conf/newvers.sh#
+|Actualice el valor de `BRANCH` a `RELEASE`
+
+|[.filename]#UPDATING#
+|Añada la fecha de anuncio prevista
+
+|[.filename]#lib/csu/common/crtbrand.c#
+|Reemplazar `__FreeBSD_version` con el valor en [.filename]#sys/sys/param.h#
+|===
+
+Después de construir la última rama `RELEASE`, la rama `releaseg/_12.0_/` es etiquetada como `release/_12.0.0_/` usando la revisión a partir de la cual se construyó la rama `RELEASE`. Similar a la creación de las ramas `stable/_12_/` y `releng/_12.0_/`, esto se hace con `svn cp`. Desde la raíz del repositorio:
+
+[source,bash]
+....
+% svn cp ^/releng/12.0/@r306420 release/12.0.0/
+% svn commit release/12.0.0/
+....
+
+[[releng-mirrors]]
+== Publicar los medios de instalación de FreeBSD para el Proyecto Mirrors
+
+Esta sección describe el procedimiento para publicar instantáneas del desarrollo de FreeBSD y las versiones en los Proyectos Mirrors.
+
+[[releng-mirrors-staging]]
+=== Poner en marcha las imágenes de los medios de instalación de FreeBSD
+
+La puesta en marcha de las instantáneas y lanzamientos de FreeBSD es un proceso de dos partes:
+
+* Creando la estructura del directorio para que coincida con la jerarquía en `ftp-master`
++ 
+Si `EVERYTHINGISFINE` está definido en los archivos de configuración de la construcción, [.filename]#main. conf# en el caso de los scripts de construcción referidos arriba, esto ocurre automáticamente en el man:chroot[8] después de que la construcción se haya completado, creando la estructura de directorios en [.filename]#${DESTDIR}/R/ftp-stage# con una estructura de rutas que coincida con lo que se espera en `ftp-master`. Esto equivale a ejecutar lo siguiente en el man:chroot[8] directamente:
++
+[source,bash]
+....
+# make -C /usr/src/release -f Makefile.mirrors EVERYTHINGISFINE=1 ftp-stage
+....
++ 
+Después de que se construye cada arquitectura, [.filename]#thermite. sh# hará rsync el [.filename]#${DESTDIR}/R/ftp- stage# de la construcción man:chroot[8] a [.filename]#/snap/ftp/snapshots# o [.filename]#/snap/ftp/releases# en el host de la construcción, respectivamente.
+* Copiar los archivos a un directorio de montaje en `ftp-master` antes de mover los archivos a [.filename]#pub/# para comenzar la propagación a los espejos del Proyecto
++ 
+Una vez que todas las construcciones hayan terminado, [.filename]#/snap/ftp/snapshots#, o [.filename]#/snap/ftp/releases# para una liberación, es encuestado por `ftp-master` usando rsync a [.filename]#/archive/tmp/snapshots# o [.filename]#/archive/tmp/releases#, respectivamente.
++
+[NOTE]
+====
+En `ftp-master` en la infraestructura del Proyecto FreeBSD, este paso requiere un acceso de nivel `root`, ya que este paso debe ser ejecutado como el usuario `archive`.
+====
+
+[[releng-mirrors-publishing]]
+=== Publicación de los soportes de instalación de FreeBSD
+
+Una vez que las imágenes son puestas en escena en [.filename]#/archive/tmp/#, están listas para ser hechas públicas poniéndolas en [.filename]#/archive/pub/FreeBSD#. Con el fin de reducir el tiempo de propagación, man:pax[1] se utiliza para crear enlaces duros desde [.filename]#/archive/tmp# a [.filename]#/archive/pub/FreeBSD#.
+
+[NOTE]
+====
+Para que esto sea efectivo, tanto [.filename]#/archive/tmp# como [.filename]#/archive/pub# deben residir en el mismo sistema lógico de archivos.
+====
+
+Sin embargo, hay una advertencia, donde rsync debe ser usada después de man:pax[1] para corregir los enlaces simbólicos en [.filename]#pub/FreeBSD/snapshots/ISO-IMAGES# que man:pax[1] reemplazará con un enlace duradero, aumentando el tiempo de propagación.
+
+[NOTE]
+====
+Al igual que con los pasos de la preparación, esto requiere un acceso de nivel `root`, ya que este paso debe ser ejecutado como el usuario `archive`.
+====
+
+Como el usuario del `archivo`:
+
+[source,bash]
+....
+% cd /archive/tmp/snapshots
+% pax -r -w -l . /archive/pub/FreeBSD/snapshots
+% /usr/local/bin/rsync -avH /archive/tmp/snapshots/* /archive/pub/FreeBSD/snapshots/
+....
+
+Reemplazar las _instantáneas_ con las _liberaciones_ según corresponda.
+
+[[releng-wrapup]]
+== Cerrando el ciclo de liberación
+
+En esta sección se describen las tareas generales posteriores a la liberación.
+
+[[releng-wrapup-en]]
+=== Notificaciones de errores posteriores a la liberación
+
+A medida que el ciclo de liberación se aproxima a su conclusión, es común tener varios EN (Errata Notice) candidatos para abordar cuestiones que fueron descubiertas al final del ciclo. Tras la liberación, el Equipo de Ingeniería de Liberación de FreeBSD y el Equipo de Seguridad de FreeBSD revisan los cambios que no fueron aprobados antes de la liberación final, y dependiendo del alcance del cambio en cuestión, pueden emitir un EN.
+
+[NOTE]
+====
+El proceso de emisión de EN es manejado por el Equipo de Seguridad de FreeBSD.
+====
+
+Para solicitar un Aviso de Errata(EN) después de que un ciclo de lanzamiento se haya completado, un desarrollador debe llenar la plantilla https://www.freebsd.org/security/errata-template.txt[Aviso de Errata], en particular las secciones `Fondo`, `Descripción del Problema`, `Impacto`, y si es aplicable, `Trabajo alrededor`.
+
+La plantilla de notificación de errores(Errata Notice) terminada debe ser enviada por correo electrónico junto con un parche contra la rama `releng/` o una lista de revisiones de la rama `estable/`.
+
+Para solicitudes de Erratas inmediatamente después de la liberación, la solicitud debe ser enviada por correo electrónico tanto al Equipo de Ingeniería de Liberación de FreeBSD como al Equipo de Seguridad de FreeBSD. Una vez que la rama `releng/` se haya entregado al Equipo de Seguridad de FreeBSD tal y como se describe en <<releng-wrapup-handoff>>, las peticiones de Notificación de Erratas(Errata Notice) deben enviarse al Equipo de Seguridad de FreeBSD.
+
+[[releng-wrapup-handoff]]
+=== Entrega al equipo de seguridad de FreeBSD
+
+Aproximadamente dos semanas después del lanzamiento, el Ingeniero de Lanzamiento actualiza[.filename]# svnadmin/conf/approvers# cambiando la columna de aprobadores de `re` a `(so|security-officer)` para la rama `releng/_12.0_`.
+
+[[releng-eol]]
+== Release End-of-Life
+
+This section describes the website-related files to update when a release reaches EoL (End-of-Life).
+
+[[releng-eol-website]]
+=== Website Updates for End-of-Life
+
+Cuando un lanzamiento llega al final de la vida, las referencias a ese lanzamiento deben ser eliminadas y/o actualizadas en el sitio web:
+
+[.informaltable]
+[cols="1,1", frame="none", options="header"]
+|===
+| Archivo
+| Qué cambiar
+
+
+|[.filename]#head/en_US.ISO8859-1/htdocs/index.xsl#
+|Remove `&u.relXXX.announce;` and `&u.relXXX.current;` references.
+
+|[.filename]#head/en_US.ISO8859-1/htdocs/releases/index.xml#
+|Mueve las macros &u.relXXX.*; de la lista de versiones soportadas a la lista de versiones obsoletas
+
+|[.filename]#head/en_US.ISO8859-1/htdocs/releng/index.xml#
+|La actualización de la rama de releng apropiado para refelejar la rama ya no es soportada.
+
+|[.filename]#head/en_US.ISO8859-1/htdocs/security/security.xml#
+|Eliminar la rama de la lista de ramas soportadas.
+
+|[.filename]#head/en_US.ISO8859-1/htdocs/where.xml#
+|Elimina los URL para la liberación.
+
+|[.filename]#head/share/xml/navibar.ent#
+|Remove `&u.relXXX.announce;` and `&u.relXXX.current;` references.
+
+|[.filename]#head/en_US.ISO8859-1/htdocs/security/advisory-template.txt#
+|Elimine las referencias a la rama de liberación y releng.
+
+|[.filename]#head/en_US.ISO8859-1/htdocs/security/errata-template.txt#
+|Elimine las referencias a la rama de liberación y releng.
+|===

@@ -1,0 +1,949 @@
+---
+title: Tutorial serial y UART
+authors:
+  - author: Frank Durda
+    email: uhclem@FreeBSD.org
+releaseinfo: "$FreeBSD$" 
+trademarks: ["freebsd", "microsoft", "general"]
+---
+
+= Tutorial serial y UART
+:doctype: article
+:toc: macro
+:toclevels: 1
+:icons: font
+:sectnums:
+:sectnumlevels: 6
+:source-highlighter: rouge
+:experimental:
+
+include::shared/authors.adoc[]
+include::shared/es/urls.adoc[]
+
+[.abstract-title]
+Resumen
+
+Este artículo habla sobre el uso de hardware serie con FreeBSD.
+
+'''
+
+toc::[]
+
+[[uart]]
+== La UART: qué es y cómo funciona
+
+_Copyright (C) 1996 Frank Durda IV mailto:uhclem@FreeBSD.org[uhclem@FreeBSD.org],Todos los derechos reservados. 13 de enero de 1996._
+
+El controlador del Receptor / Transmisor Asíncrono Universal (UART) es el componente clave del subsistema de comunicaciones en serie de una computadora. El UART toma bytes de datos y transmite los bits individuales de forma secuencial. En el destino, un segundo UART vuelve a ensamblar los bits en bytes completos.
+
+La transmisión en serie se usa comúnmente con módems y para la comunicación no en red entre computadoras, terminales y otros dispositivos.
+
+Hay dos formas principales de transmisión en serie: sincrónica y asincrónica. Dependiendo de los modos admitidos por el hardware, el nombre del subsistema de comunicación generalmente incluirá un `A` si admite comunicaciones asincrónicas y un `S` si admite comunicaciones síncronas. Ambas formas se describen a continuación.
+
+Algunos acrónimos comunes son:
+
+Receptor/transmisor asíncrono universal UART
+
+Receptor/transmisor síncrono-asíncrono universal USART
+
+=== Transmisión en serie sincrónica
+
+La transmisión en serie síncrona requiere que el remitente y el receptor compartan un reloj entre sí, o que el remitente proporcione una señal estroboscópica u otra señal de tiempo para que el receptor sepa cuándo"leer" el siguiente bit de datos. En la mayoría de las formas de comunicación síncrona en serie, si no hay datos disponibles en un instante dado para transmitir, se debe enviar un carácter de relleno en su lugar para que los datos siempre se transmitan. La comunicación síncrona suele ser más eficiente porque solo se transmiten bits de datos entre el emisor y el receptor, y la comunicación síncrona puede ser más costosa si se requiere cableado y circuitos adicionales para compartir una señal de reloj entre el emisor y el receptor.
+
+Una forma de transmisión síncrona se utiliza con impresoras y dispositivos de disco fijo en la que los datos se envían por un conjunto de cables mientras que un reloj o luz estroboscópica se envía por un cable diferente. Las impresoras y los dispositivos de disco fijo normalmente no son dispositivos en serie porque la mayoría de los estándares de interfaz de disco fijo envían una palabra completa de datos para cada reloj o señal estroboscópica utilizando un cable separado para cada bit de la palabra. En la industria de las PC, estos se conocen como dispositivos paralelos.
+
+El hardware de comunicaciones en serie estándar de la PC no admite operaciones síncronas. Este modo se describe aquí solo con fines comparativos.
+
+=== Transmisión en serie asíncrona
+
+La transmisión asíncrona permite que los datos se transmitan sin que el remitente tenga que enviar una señal de reloj al receptor. En cambio, el remitente y el receptor deben acordar los parámetros de temporización de antemano y se agregan bits especiales a cada palabra que se utilizan para sincronizar las unidades de envío y recepción.
+
+Cuando se le da una palabra a la UART para transmisiones asincrónicas, se agrega un bit llamado "Bit de inicio" al comienzo de cada palabra que se va a transmitir. El bit de inicio se utiliza para alertar al receptor de que se va a enviar una palabra de datos y para forzar la sincronización del reloj del receptor con el del transmisor. Estos dos relojes deben ser lo suficientemente precisos como para que la frecuencia no se desvíe más del 10% durante la transmisión de los bits restantes en la palabra. (Este requisito se estableció en la época de las teleimpresoras mecánicas y se cumple fácilmente con los equipos electrónicos modernos.)
+
+Después del bit de inicio, se envían los bits individuales de la palabra de datos, enviando primero el bit menos significativo (LSB). Cada bit de la transmisión se transmite durante exactamente la misma cantidad de tiempo que todos los demás bits, y el receptor "looks" en el cable aproximadamente a la mitad del período asignado a cada bit para determinar si el bit es un `1` o un `0`. Por ejemplo, si se necesitan dos segundos para enviar cada bit, el receptor examinará la señal para determinar si es un `1` o un `0` después de que haya pasado un segundo, esperará dos segundos y luego examinará el valor del siguiente bit, y así sucesivamente.
+
+El remitente no sabe cuando el receptor ha "looked" al valor del bit. El remitente solo sabe cuándo el reloj dice que debe comenzar a transmitir el siguiente bit de la palabra.
+
+Cuando se ha enviado toda la palabra de datos, el transmisor puede agregar un bit de paridad que genera el transmisor. El receptor puede utilizar el bit de paridad para realizar una comprobación de errores sencilla. Entonces, el transmisor envía al menos un bit de parada.
+
+Cuando el receptor ha recibido todos los bits de la palabra de datos, puede comprobar los bits de paridad (tanto el emisor como el receptor deben estar de acuerdo sobre si se utilizará un bit de paridad), y luego el receptor busca un bit de parada. Si el bit de parada no aparece cuando se supone que debe hacerlo, la UART considera que la palabra completa está distorsionada y notificará un error de encuadre al procesador host cuando se lea la palabra de datos. La causa habitual de un error de encuadre es que los relojes del emisor y del receptor no funcionaban a la misma velocidad o que la señal se interrumpió.
+
+Independientemente de si los datos se recibieron correctamente o no, la UART descarta automáticamente los bits de inicio, paridad y parada. Si el remitente y el receptor están configurados de manera idéntica, estos bits no se pasan al host.
+
+Si hay otra palabra lista para la transmisión, el bit de inicio para la nueva palabra se puede enviar tan pronto como se haya enviado el bit de parada para la palabra anterior.
+
+Because asynchronous data is "self synchronizing", if there is no data to transmit, the transmission line can be idle.
+
+=== Otras funciones de UART
+
+Además del trabajo básico de convertir datos de paralelo a serie para la transmisión y de serie a paralelo en la recepción, un UART generalmente proporcionará circuitos adicionales para señales que se pueden usar para indicar el estado de los medios de transmisión y para regular el flujo. de datos en caso de que el dispositivo remoto no esté preparado para aceptar más datos. Por ejemplo, cuando el dispositivo conectado a la UART es un módem, el módem puede informar la presencia de un operador en la línea telefónica mientras que la computadora puede indicarle al módem que se reinicie o que no tome llamadas subiendo o bajando uno. más de estas señales adicionales. La función de cada una de estas señales adicionales se define en el estándar EIA RS232-C.
+
+=== Los estándares RS232-C y V.24
+
+En la mayoría de los sistemas informáticos, el UART está conectado a circuitos que generan señales que cumplen con la especificación EIA RS232-C. También hay un estándar CCITT llamado V.24 que refleja las especificaciones incluidas en RS232-C.
+
+==== Asignaciones de bits RS232-C (marcas y espacios)
+
+En RS232-C, un valor de `1` se llama un `Mark` y un valor de `0` se llama un `Space`. entonces una línea de comunicación está inactiva, se dice que la línea está "Marking", o transmitiendo continuo `1` valores.
+
+El bit de inicio siempre tiene un valor de `0` (un espacio). El bit de parada siempre tiene un valor de `1`(una marca). Esto significa que siempre habrá una transición de Marca (1) a Espacio (0) en la línea al comienzo de cada palabra, incluso cuando se transmiten varias palabras una tras otra. Esto garantiza que el remitente y el receptor puedan resincronizar sus relojes independientemente del contenido de los bits de datos que se están transmitiendo.
+
+El tiempo de inactividad entre los bits de parada y de inicio no tiene que ser un múltiplo exacto (incluido cero) de la tasa de bits del enlace de comunicación, pero la mayoría de los UART están diseñados de esta manera para simplificar.
+
+En RS232-C, la señal de "Marcado" (un `1`) está representado por un voltaje entre -2 VCC y -12 VCC, y una señal de "espaciado" (un `0`) está representado por un voltaje entre 0 y +12 VCC. Se supone que el transmisor envía +12 VCC o -12 VCC, y se supone que el receptor debe permitir alguna pérdida de voltaje en cables largos. Algunos transmisores en dispositivos de baja potencia (como computadoras portátiles) a veces usan solo +5 VCC y -5 VCC, pero estos valores aún son aceptables para un receptor RS232-C, siempre que la longitud del cable sea corta.
+
+==== Señal de ruptura RS232-C
+
+RS232-C también especifica una señal llamada `Break`,que es causado por el envío de valores de espaciado continuos (sin bits de inicio o parada). Cuando no hay electricidad presente en el circuito de datos, se considera que la línea está enviando `Break`.
+
+En `Break` La señal debe tener una duración superior al tiempo que se tarda en enviar un byte completo más los bits de inicio, parada y paridad. La mayoría de los UART pueden distinguir entre un error de encuadre y una ruptura, pero si el UART no puede hacer esto, la detección de errores de encuadre se puede utilizar para identificar rupturas.
+
+En los días de las teleimpresoras, cuando numerosas impresoras en todo el país estaban conectadas en serie (como los servicios de noticias), cualquier unidad podía causar una `Break` abriendo temporalmente todo el circuito para que no fluya corriente. Esto se utilizó para permitir que una ubicación con noticias urgentes interrumpiera alguna otra ubicación que estaba enviando información en ese momento.
+
+En los sistemas modernos hay dos tipos de señales de interrupción. Si la interrupción dura más de 1,6 segundos, se considera una "interrupción del módem" y algunos módems pueden programarse para terminar la conversación y colgar o ingresar al modo de comando de los módems cuando el módem detecta esta señal. Si la ruptura es menor de 1,6 segundos, significa una ruptura de datos y depende de la computadora remota responder a esta señal. A veces, esta forma de interrupción se utiliza como señal de atención o interrupción y, a veces, se acepta como sustituto del carácter ASCII CONTROL-C.
+
+Las marcas y los espacios también son equivalentes a "Holes" y "No Holes" en sistemas de cinta de papel.
+
+[NOTE]
+====
+Las rupturas no se pueden generar a partir de cinta de papel o de cualquier otro valor de byte, ya que los bytes siempre se envían con el bit de inicio y parada. El UART generalmente es capaz de generar la señal de espaciado continua en respuesta a un comando especial del procesador host.
+====
+
+==== Dispositivos RS232-C DTE y DCE
+
+La especificación RS232-C define dos tipos de equipos: el equipo terminal de datos (DTE) y el equipo portador de datos (DCE). Por lo general, el dispositivo DTE es el terminal (o computadora) y el DCE es un módem. Al otro lado de la línea telefónica en el otro extremo de una conversación, el módem receptor también es un dispositivo DCE y la computadora que está conectada a ese módem es un dispositivo DTE. El dispositivo DCE recibe señales en los pines en los que transmite el dispositivo DTE, y viceversa.
+
+Cuando dos dispositivos que son DTE o ambos DCE deben conectarse juntos sin un módem o un traductor de medios similar entre ellos, se debe utilizar un módem NULL. El módem NULL reorganiza eléctricamente el cableado de modo que la salida del transmisor se conecte a la entrada del receptor en el otro dispositivo y viceversa. Se realizan traducciones similares en todas las señales de control para que cada dispositivo vea lo que cree que son señales DCE (o DTE) del otro dispositivo.
+
+El número de señales generadas por los dispositivos DTE y DCE no es simétrico. El dispositivo DTE genera menos señales para el dispositivo DCE que las que recibe el dispositivo DTE del DCE.
+
+==== Asignaciones de pines RS232-C
+
+La especificación EIA RS232-C (y el equivalente de ITU, V.24) requiere un conector de veinticinco pines (generalmente un DB25) y define el propósito de la mayoría de los pines en ese conector.
+
+En la computadora personal IBM y sistemas similares, se proporciona un subconjunto de señales RS232-C a través de conectores de nueve clavijas (DB9). Las señales que no están incluidas en el conector de la PC se refieren principalmente al funcionamiento síncrono, y este modo de transmisión no es compatible con la UART que IBM seleccionó para su uso en la PC de IBM.
+
+Dependiendo del fabricante de la computadora, se puede usar un conector DB25, DB9 o ambos tipos de conector para comunicaciones RS232-C. (El IBM PC también usa un conector DB25 para la interfaz de impresora paralela, lo que causa cierta confusión.)
+
+A continuación se muestra una tabla de las asignaciones de señales RS232-C en los conectores DB25 y DB9.
+
+[.informaltable]
+[cols="1,1,1,1,1,1,1", frame="none", options="header"]
+|===
+| Pin DB25 RS232-C
+| Pin DB9 IBM PC
+| Símbolo de circuito EIA
+| Símbolo de circuito CCITT
+| Nombre común
+| Fuente de señal
+| Descripción
+
+
+|1
+|-
+|AA
+|101
+|PG/FG
+|-
+|Marco/Tierra de protección
+
+|2
+|3
+|BA
+|103
+|TD
+|DTE
+|Dato transmitido
+
+|3
+|2
+|BB
+|104
+|RD
+|DCE
+|Recibir datos
+
+|4
+|7
+|CA
+|105
+|RTS
+|DTE
+|Petición para enviar
+
+|5
+|8
+|CB
+|106
+|CTS
+|DCE
+|Claro para enviar
+
+|6
+|6
+|CC
+|107
+|DSR
+|DCE
+|Conjunto de datos listo
+
+|7
+|5
+|AV
+|102
+|SG/GND
+|-
+|Tierra de señal
+
+|8
+|1
+|CF
+|109
+|DCD/CD
+|DCE
+|Detección de portador de datos
+
+|9
+|-
+|-
+|-
+|-
+|-
+|Reservado para prueba
+
+|10
+|-
+|-
+|-
+|-
+|-
+|Reservado para prueba
+
+|11
+|-
+|-
+|-
+|-
+|-
+|Reservado para prueba
+
+|12
+|-
+|CI
+|122
+|SRLSD
+|DCE
+|Segundo. Recv. Detector de señal de línea
+
+|13
+|-
+|SCB
+|121
+|SCTS
+|DCE
+|Secundario claro para enviar
+
+|14
+|-
+|SBA
+|118
+|STD
+|DTE
+|Datos de transmisión secundarios
+
+|15
+|-
+|DB
+|114
+|TSET
+|DCE
+|Trans. Sig. Tiempo de elemento
+
+|16
+|-
+|SBB
+|119
+|SRD
+|DCE
+|Datos secundarios recibidos
+
+|17
+|-
+|DD
+|115
+|RSET
+|DCE
+|Temporalización del elemento de señal del receptor
+
+|18
+|-
+|-
+|141
+|LOOP
+|DTE
+|Loopback local
+
+|19
+|-
+|SCA
+|120
+|SRS
+|DTE
+|Solicitud secundaria para enviar
+
+|20
+|4
+|CD
+|108.2
+|DTR
+|DTE
+|Terminal de datos listo
+
+|21
+|-
+|-
+|-
+|RDL
+|DTE
+|Bucle de retorno digital remoto
+
+|22
+|9
+|CE
+|125
+|RI
+|DCE
+|Indicador de anillo
+
+|23
+|-
+|CH
+|111
+|DSRS
+|DTE
+|Selector de velocidad de señal de datos
+
+|24
+|-
+|DA
+|113
+|TSET
+|DTE
+|Trans. Sig. Tiempo de elemento
+
+|25
+|-
+|-
+|142
+|-
+|DCE
+|Modo de prueba
+|===
+
+=== Bits, baudios y símbolos
+
+Baud is a measurement of transmission speed in asynchronous communication. Because of advances in modem communication technology, this term is frequently misused when describing the data rates in newer devices.
+
+Tradicionalmente, una velocidad en baudios representa la cantidad de bits que realmente se envían a través de los medios, no la cantidad de datos que realmente se mueven de un dispositivo DTE a otro. El recuento en baudios incluye los bits de sobrecarga Start, Stop y Parity que son generados por el UART emisor y eliminados por el UART receptor. Esto significa que las palabras de datos de siete bits en realidad necesitan 10 bits para transmitirse por completo. Por lo tanto, un módem capaz de mover 300 bits por segundo de un lugar a otro normalmente solo puede mover 30 palabras de 7 bits si se usa la paridad y hay un bit de inicio y parada.
+
+Si se utilizan palabras de datos de 8 bits y también se utilizan bits de paridad, la velocidad de datos cae a 27,27 palabras por segundo, porque ahora se necesitan 11 bits para enviar las palabras de ocho bits, y el módem aún envía solo 300 bits por segundo.
+
+La fórmula para convertir bytes por segundo en una velocidad en baudios y viceversa era simple hasta que aparecieron los módems correctores de errores. Estos módems reciben el flujo de bits en serie del UART en la computadora host (incluso cuando se utilizan módems internos, los datos todavía se serializan con frecuencia) y vuelven a convertir los bits en bytes. Luego, estos bytes se combinan en paquetes y se envían a través de la línea telefónica utilizando un método de transmisión sincrónica. Esto significa que los bits de parada, inicio y paridad agregados por el UART en el DTE (la computadora) fueron eliminados por el módem antes de la transmisión por el módem emisor. Cuando estos bytes son recibidos por el módem remoto, el módem remoto agrega bits de inicio, parada y paridad a las palabras, los convierte a un formato serial y luego los envía al UART receptor en la computadora remota, quien luego quita el inicio, parada y bits de paridad.
+
+La razón por la que se realizan todas estas conversiones adicionales es para que los dos módems puedan realizar la corrección de errores, lo que significa que el módem receptor puede pedirle al módem emisor que reenvíe un bloque de datos que no se recibió con la suma de comprobación correcta. Esta verificación es manejada por los módems, y los dispositivos DTE generalmente ignoran que el proceso está ocurriendo.
+
+Al dividir los bits de inicio, parada y paridad, los bits de datos adicionales que los dos módems deben compartir entre sí para realizar la corrección de errores se ocultan en su mayoría de la velocidad de transmisión efectiva vista por el equipo DTE emisor y receptor. Por ejemplo, si un módem envía diez palabras de 7 bits a otro módem sin incluir los bits de inicio, parada y paridad, el módem emisor podrá agregar 30 bits de su propia información que el módem receptor puede utilizar para corregir errores. sin afectar la velocidad de transmisión de los datos reales.
+
+El uso del término baudios se confunde aún más con los módems que realizan compresión. Una sola palabra de 8 bits pasada a través de la línea telefónica podría representar una docena de palabras que se transmitieron al módem emisor. El módem receptor expandirá los datos a su contenido original y pasará esos datos al DTE receptor.
+
+Los módems modernos también incluyen búferes que permiten que la velocidad a la que los bits se mueven a través de la línea telefónica (DCE a DCE) sea diferente a la velocidad a la que se mueven los bits entre el DTE y el DCE en ambos extremos de la conversación. Normalmente, la velocidad entre el DTE y el DCE es mayor que la velocidad de DCE a DCE debido al uso de compresión por los módems.
+
+Because the number of bits needed to describe a byte varied during the trip between the two machines plus the differing bits-per-seconds speeds that are used present on the DTE-DCE and DCE-DCE links, the usage of the term Baud to describe the overall communication speed causes problems and can misrepresent the true transmission speed. So Bits Per Second (bps) is the correct term to use to describe the transmission rate seen at the DCE to DCE interface and Baud or Bits Per Second are acceptable terms to use when a connection is made between two systems with a wired connection, or if a modem is in use that is not performing error-correction or compression.
+
+Los módems modernos de alta velocidad (2400, 9600, 14,400 y 19,200bps) en realidad todavía funcionan a 2400 baudios o menos, o más exactamente, a 2400 símbolos por segundo. El módem de alta velocidad puede codificar más bits de datos en cada símbolo utilizando una técnica llamada Constellation Stuffing, razón por la cual la tasa efectiva de bits por segundo del módem es mayor, pero el módem continúa funcionando dentro del ancho de banda de audio limitado que el teléfono proporciona el sistema. Los módems que funcionan a 28.800 y velocidades superiores tienen velocidades de símbolo variables, pero la técnica es la misma.
+
+=== La computadora personal de IBM UART
+
+Comenzando con la computadora personal IBM original, IBM seleccionó el UART National Semiconductor INS8250 para su uso en el Adaptador Serial / Paralelo de IBM PC. Las generaciones posteriores de computadoras compatibles de IBM y otros proveedores continuaron utilizando el INS8250 o versiones mejoradas de la familia UART de National Semiconductor.
+
+==== Árbol genealógico de National Semiconductor UART
+
+Ha habido varias versiones y generaciones posteriores del INS8250 UART. Cada versión principal se describe a continuación.
+
+[.programlisting]
+....
+INS8250  -> INS8250B
+  \
+   \
+    \-> INS8250A -> INS82C50A
+             \
+              \
+               \-> NS16450 -> NS16C450
+                        \
+                         \
+                          \-> NS16550 -> NS16550A -> PC16550D
+....
+
+
+INS8250::
+Esta pieza se utilizó en el IBM PC original y el IBM PC / XT. El nombre original de esta pieza era INS8250 ACE (Elemento de comunicaciones asincrónicas) y está fabricado con tecnología NMOS.
++
+El 8250 utiliza ocho puertos de E / S y tiene un búfer de envío de un byte y un búfer de recepción de un byte. Este UART original tiene varias condiciones de carrera y otros defectos. El BIOS de IBM original incluye código para solucionar estos defectos, pero esto hizo que el BIOS dependiera de los defectos presentes, por lo que las partes posteriores como el 8250A, 16450 o 16550 no se pudieron usar en el IBM PC o IBM PC / XT original.
+
+INS8250-B::
+Esta es la velocidad más lenta del INS8250 fabricado con tecnología NMOS. Contiene los mismos problemas que el INS8250 original.
+
+INS8250A::
+An improved version of the INS8250 using XMOS technology with various functional flaws corrected. The INS8250A was used initially in PC clone computers by vendors who used "clean" BIOS designs. Because of the corrections in the chip, this part could not be used with a BIOS compatible with the INS8250 or INS8250B.
+
+INS82C50A::
+Esta es una versión CMOS (bajo consumo de energía) del INS8250A y tiene características funcionales similares.
+
+NS16450::
+Igual que NS8250A con mejoras para que pueda usarse con diseños de bus de CPU más rápidos. IBM usó esta parte en IBM AT y actualizó el BIOS de IBM para no depender más de los errores en el INS8250.
+
+NS16C450::
+Esta es una versión CMOS (bajo consumo de energía) del NS16450.
+
+NS16550::
+Igual que NS16450 con un búfer de envío y recepción de 16 bytes, pero el diseño del búfer era defectuoso y no se podía utilizar de forma fiable.
+
+NS16550A::
+Igual que NS16550 con los defectos del búfer corregidos. El 16550A y sus sucesores se han convertido en el diseño UART más popular en la industria de las PC, principalmente debido a su capacidad para manejar de manera confiable velocidades de datos más altas en sistemas operativos con tiempos de respuesta de interrupción lentos.
+
+NS16C552::
+Este componente consta de dos UART CMOS NS16C550A en un solo paquete.
+
+PC16550D::
+Igual que NS16550A con sutiles defectos corregidos. Esta es la revisión D de la familia 16550 y es el último diseño disponible de National Semiconductor.
+
+==== El NS16550AF y el PC16550D son lo mismo
+
+National reorganizó su sistema de numeración de piezas hace unos años y el NS16550AFN ya no existe con ese nombre. (Si tiene un NS16550AFN, mire el código de fecha en la parte, que es un número de cuatro dígitos que generalmente comienza con un nueve. Los primeros dos dígitos del número son el año y los últimos dos dígitos son la semana en ese año en el que se empaquetó la pieza. Si tiene un NS16550AFN, probablemente tenga algunos años.)
+
+Los nuevos números son como PC16550DV, con pequeñas diferencias en las letras del sufijo según el material del paquete y su forma. (Puede encontrar una descripción del sistema de numeración a continuación.)
+
+Es importante comprender que en algunas tiendas, puede pagar $ 15 (EE. UU.) Por un NS16550AFN fabricado en 1990 y en el siguiente contenedor están las nuevas piezas PC16550DN con pequeñas reparaciones que National ha realizado desde que la pieza AFN estaba en producción, la PC16550DN probablemente se fabricó en los últimos seis meses y cuesta la mitad (tan bajo como $ 5 (EE.UU.) en volumen) que el NS16550AFN porque están fácilmente disponibles.
+
+A medida que el suministro de chips NS16550AFN sigue disminuyendo, el precio probablemente seguirá aumentando hasta que más personas descubran y acepten que el PC16550DN realmente tiene la misma función que el número de pieza anterior.
+
+==== Sistema nacional de numeración de piezas de semiconductores
+
+El mayor NS _nnnnnrqp_ los números de pieza ahora tienen el formato PC__nnnnnrgp__.
+
+El _r_ es el campo de revisión. La revisión actual del 16550 de National Semiconductor es `D`.
+
+El _p_ es el campo de tipo de paquete. Los tipos son:
+
+[.informaltable]
+[cols="1,1,1", frame="none"]
+|===
+
+|"F"
+|QFP
+|(paquete plano cuádruple) Tipo de cable L
+
+|"N"
+|DIP
+|(paquete en línea dual) tipo de cable recto con orificio pasante
+
+|"V"
+|LPCC
+|(portador de chips de plástico de plomo) Tipo de cable J
+|===
+
+El _g_ es el campo de grado de producto. Si una `I` precede a la letra del tipo de paquete, indica una "industrial" pieza de grado, que tiene especificaciones más altas que una pieza estándar pero no tan altas como el componente de Especificación Militar (Milspec). Este campo es opcional.
+
+Entonces, lo que solíamos llamar NS16550AFN (paquete DIP) ahora se llama PC16550DN o PC16550DIN.
+
+=== Otros proveedores y UART similares
+
+A lo largo de los años, otros proveedores de chips han autorizado o copiado el 8250, 8250A, 16450 y 16550. En el caso de 8250, 8250A y 16450, el circuito exacto (el "megacell") fue licenciada a muchos proveedores, incluidos Western Digital e Intel. Otros proveedores realizaron ingeniería inversa de la pieza o produjeron emulaciones que tenían un comportamiento similar.
+
+In internal modems, the modem designer will frequently emulate the 8250A/16450 with the modem microprocessor, and the emulated UART will frequently have a hidden buffer consisting of several hundred bytes. Because of the size of the buffer, these emulations can be as reliable as a 16550A in their ability to handle high speed data. However, most operating systems will still report that the UART is only a 8250A or 16450, and may not make effective use of the extra buffering present in the emulated UART unless special drivers are used.
+
+Algunos fabricantes de módems se ven impulsados por las fuerzas del mercado a abandonar un diseño que tiene cientos de bytes de búfer y, en su lugar, utilizan un UART 16550A para que el producto se compare favorablemente en las comparaciones del mercado, aunque esta acción pueda reducir el rendimiento efectivo.
+
+Un error común es que todas las partes con "16550A" escrito en ellos son idénticos en rendimiento. Existen diferencias y, en algunos casos, fallas absolutas en la mayoría de estos clones 16550A.
+
+When the NS16550 was developed, the National Semiconductor obtained several patents on the design and they also limited licensing, making it harder for other vendors to provide a chip with similar features. Because of the patents, reverse-engineered designs and emulations had to avoid infringing the claims covered by the patents. Subsequently, these copies almost never perform exactly the same as the NS16550A or PC16550D, which are the parts most computer and modem makers want to buy but are sometimes unwilling to pay the price required to get the genuine part.
+
+Algunas de las diferencias en las partes del clon 16550A no son importantes, mientras que otras pueden evitar que el dispositivo se use con un sistema operativo o controlador determinado. Estas diferencias pueden aparecer cuando se utilizan otros controladores o cuando ocurren combinaciones particulares de eventos que no fueron bien probados o considerados en el Windows(TM) conductor. Esto se debe a que la mayoría de los proveedores de módems y fabricantes de clones 16550 utilizan los controladores de Microsoft de Windows(TM) Para grupos de trabajo 3.11 y el Microsoft(TM)MS-DOS(TM) utilidad como las principales pruebas de compatibilidad con el NS16550A. Este criterio demasiado simplista significa que si se usa un sistema operativo diferente, podrían aparecer problemas debido a diferencias sutiles entre los clones y los componentes genuinos.
+
+National Semiconductor ha puesto a disposición un programa llamado COMTEST que realiza pruebas de compatibilidad independientes de los controladores del sistema operativo. Debe recordarse que el propósito de este tipo de programa es demostrar las fallas en los productos de la competencia, por lo que el programa reportará diferencias importantes y extremadamente sutiles en el comportamiento de la parte que se está probando.
+
+In a series of tests performed by the author of this document in 1994, components made by National Semiconductor, TI, StarTech, and CMD as well as megacells and emulations embedded in internal modems were tested with COMTEST. A difference count for some of these components is listed below. Because these tests were performed in 1994, they may not reflect the current performance of the given product from a vendor.
+
+Cabe señalar que COMTEST normalmente aborta cuando se detecta un número excesivo o ciertos tipos de problemas. Como parte de esta prueba, COMTEST se modificó para que no abortara sin importar cuántas diferencias se encontraran.
+
+[.informaltable]
+[cols="1,1,1", frame="none", options="header"]
+|===
+| Vendedor
+| Número de pieza
+| Errores (también conocidos como "diferencias" informadas)
+
+
+|National
+|(PC16550DV)
+|0
+
+|National
+|(NS16550AFN)
+|0
+
+|National
+|(NS16C552V)
+|0
+
+|TI
+|(TL16550AFN)
+|3
+
+|CMD
+|(16C550PE)
+|19
+
+|StarTech
+|(ST16C550J)
+|23
+
+|Rockwell
+|Módem de referencia con 16550 interno o una emulación (RC144DPi / C3000-25)
+|117
+
+|Sierra
+|Módem con 16550 interno (SC11951 / SC11351)
+|91
+|===
+
+[NOTE]
+====
+Hasta la fecha, el autor de este documento no ha encontrado partes no nacionales que reporten cero diferencias usando el programa COMTEST. También debe tenerse en cuenta que National ha tenido cinco versiones del 16550 a lo largo de los años y las piezas más nuevas se comportan un poco diferente al clásico NS16550AFN que se considera el punto de referencia para la funcionalidad. COMTEST parece hacer la vista gorda a las diferencias dentro de la línea de productos de National y no informa errores en las partes de National (a excepción del 16550 original) incluso cuando hay erratas oficiales que describen errores en las revisiones A, B y C de las partes. , por lo que este sesgo en COMTEST debe tenerse en cuenta.
+====
+
+Es importante entender que un simple recuento de diferencias de COMTEST no revela mucho sobre qué diferencias son importantes y cuáles no. Por ejemplo, aproximadamente la mitad de las diferencias informadas en los dos módems enumerados anteriormente que tienen UART internos se deben a que los UART clonados no admiten modos de caracteres de cinco y seis bits. Todos los UART 16550, 16450 y 8250 reales admiten estos modos y COMTEST verifica la funcionalidad de estos modos, por lo que se informan más de cincuenta diferencias. Sin embargo, casi ningún módem moderno admite caracteres de cinco o seis bits, particularmente aquellos con capacidad de corrección de errores y compresión. Esto significa que se pueden descartar las diferencias relacionadas con los modos de caracteres de cinco y seis bits.
+
+Muchas de las diferencias de los informes COMTEST tienen que ver con la sincronización. En muchos de los diseños de clones, cuando el host lee desde un puerto, es posible que los bits de estado en algún otro puerto no se actualicen en la misma cantidad de tiempo (algunos más rápido, otros más lento) que un _real_ NS16550AFN y COMTEST buscan estas diferencias. Esto significa que el número de diferencias puede ser engañoso en el sentido de que un dispositivo puede tener solo una o dos diferencias pero son extremadamente serias, y algún otro dispositivo que actualiza los registros de estado más rápido o más lento que la parte de referencia (eso probablemente nunca afectaría la operación de un controlador escrito correctamente) podría tener decenas de diferencias reportadas.
+
+COMTEST se puede utilizar como una herramienta de detección para alertar al administrador de la presencia de componentes potencialmente incompatibles que pueden causar problemas o deben manejarse como un caso especial.
+
+Si ejecuta COMTEST en un 16550 que está en un módem o hay un módem conectado al puerto serie, primero debe emitir un ATE0 &W comando al módem para que el módem no repita ninguno de los caracteres de prueba. Si olvida hacer esto, COMTEST informará al menos esta diferencia:
+
+[source,bash]
+....
+Error (6) ... Error de interrupción de tiempo de espera: IIR = c1 LSR = 61
+....
+
+
+=== 8250/16450/16550 registros
+
+El UART 8250/16450/16550 ocupa ocho direcciones de puertos de E / S contiguas. En IBM PC, hay dos ubicaciones definidas para estos ocho puertos y se conocen colectivamente como [.filename]#COM1# y [.filename]#COM2#. Los creadores de clones de PC y tarjetas complementarias han creado dos áreas adicionales conocidas como [.filename]#COM3# y [.filename]#COM4#, pero estos puertos COM adicionales entran en conflicto con otro hardware en algunos sistemas. El conflicto más común es con los adaptadores de video que proporcionan emulación IBM 8514.
+
+[.filename]#COM1# se ubica de 0x3f8 a 0x3ff y normalmente usa IRQ 4. [.filename]#COM2# se ubica de 0x2f8 a 0x2ff y normalmente usa IRQ 3. [.filename]#COM3# se ubica de 0x3e8 a 0x3ef y no tiene IRQ estandarizada.[.filename]#COM4# está ubicado de 0x2e8 a 0x2ef y no tiene IRQ estandarizado.
+
+A continuación se proporciona una descripción de los puertos de E / S del UART 8250/16450/16550.
+
+[.informaltable]
+[cols="1,1,1", frame="none", options="header"]
+|===
+| I/O Port
+| Acceso permitido
+| Descripción
+
+
+|+0x00
+|write (DLAB==0)
+|
+
+Transmitir registro de retención (THR).
+
+La información escrita en este puerto se trata como palabras de datos y será transmitida por UART.
+
+|+0x00
+|read (DLAB==0)
+|
+
+Recibir registro de búfer (RBR).
+
+El host accede a todas las palabras de datos recibidas por el UART desde el enlace en serie leyendo este puerto.
+
+|+0x00
+|write/read (DLAB==1)
+|
+
+Divisor Latch LSB (DLL)
+
+Este valor se dividirá del reloj de entrada maestro (en la PC IBM, el reloj maestro es 1.8432MHz) y el reloj resultante determinará la velocidad en baudios del UART. Este registro contiene los bits 0 a 7 del divisor.
+
+|+0x01
+|write/read (DLAB==1)
+|
+
+Pestillo divisor MSB (DLH)
+
+Este valor se dividirá del reloj de entrada maestro (en la PC IBM, el reloj maestro es 1.8432MHz) y el reloj resultante determinará la velocidad en baudios del UART. Este registro contiene los bits 8 a 15 del divisor.
+
+|+0x01
+|write/read (DLAB==0)
+|
+
+|+0x02
+|escribir
+|
+
+|+0x02
+|leer
+|
+
+|+0x03
+|escribe/Lee
+|
+
+|+0x04
+|escribe/Lee
+|
+
+|+0x05
+|escribe/Lee
+|
+
+|+0x06
+|escribe/Lee
+|
+
+|+0x07
+|escribe/Lee
+|Scratch Register (SCR). This register performs no function in the UART. Any value can be written by the host to this location and read by the host later on.
+|===
+
+=== Beyond the 16550A UART
+
+Although National Semiconductor has not offered any components compatible with the 16550 that provide additional features, various other vendors have. Some of these components are described below. It should be understood that to effectively utilize these improvements, drivers may have to be provided by the chip vendor since most of the popular operating systems do not support features beyond those provided by the 16550.
+
+ST16650::
+By default this part is similar to the NS16550A, but an extended 32-byte send and receive buffer can be optionally enabled. Made by StarTech.
+
+TIL16660::
+By default this part behaves similar to the NS16550A, but an extended 64-byte send and receive buffer can be optionally enabled. Made by Texas Instruments.
+
+Hayes ESP::
+This proprietary plug-in card contains a 2048-byte send and receive buffer, and supports data rates to 230.4Kbit/sec. Made by Hayes.
+
+In addition to these "dumb" UARTs, many vendors produce intelligent serial communication boards. This type of design usually provides a microprocessor that interfaces with several UARTs, processes and buffers the data, and then alerts the main PC processor when necessary. Because the UARTs are not directly accessed by the PC processor in this type of communication system, it is not necessary for the vendor to use UARTs that are compatible with the 8250, 16450, or the 16550 UART. This leaves the designer free to components that may have better performance characteristics.
+
+[[sio]]
+== Configuring the [.filename]#sio# driver
+
+The [.filename]#sio# driver provides support for NS8250-, NS16450-, NS16550 and NS16550A-based EIA RS-232C (CCITT V.24) communications interfaces. Several multiport cards are supported as well. See the man:sio[4] manual page for detailed technical documentation.
+
+=== Digi International (DigiBoard) PC/8
+
+_Contributed by Andrew Webster mailto:awebster@pubnix.net[awebster@pubnix.net]. 26 August 1995._
+
+Here is a config snippet from a machine with a Digi International PC/8 with 16550. It has 8 modems connected to these 8 lines, and they work just great. Do not forget to add `options COM_MULTIPORT` or it will not work very well!
+
+[.programlisting]
+....
+device          sio4    at isa? port 0x100 flags 0xb05
+device          sio5    at isa? port 0x108 flags 0xb05
+device          sio6    at isa? port 0x110 flags 0xb05
+device          sio7    at isa? port 0x118 flags 0xb05
+device          sio8    at isa? port 0x120 flags 0xb05
+device          sio9    at isa? port 0x128 flags 0xb05
+device          sio10   at isa? port 0x130 flags 0xb05
+device          sio11   at isa? port 0x138 flags 0xb05 irq 9
+....
+
+The trick in setting this up is that the MSB of the flags represent the last SIO port, in this case 11 so flags are 0xb05.
+
+=== Boca 16
+
+_Contributed by Don Whiteside mailto:whiteside@acm.org[whiteside@acm.org]. 26 August 1995._
+
+The procedures to make a Boca 16 port board with FreeBSD are pretty straightforward, but you will need a couple things to make it work:
+
+. You either need the kernel sources installed so you can recompile the necessary options or you will need someone else to compile it for you. The 2.0.5 default kernel does _not_ come with multiport support enabled and you will need to add a device entry for each port anyways.
+. Two, you will need to know the interrupt and IO setting for your Boca Board so you can set these options properly in the kernel.
+
+One important note -- the actual UART chips for the Boca 16 are in the connector box, not on the internal board itself. So if you have it unplugged, probes of those ports will fail. I have never tested booting with the box unplugged and plugging it back in, and I suggest you do not either.
+
+If you do not already have a custom kernel configuration file set up, refer to link:{handbook}#kernelconfig[Kernel Configuration] chapter of the FreeBSD Handbook for general procedures. The following are the specifics for the Boca 16 board and assume you are using the kernel name MYKERNEL and editing with vi.
+
+[.procedure]
+====
+. Add the line 
++
+[.programlisting]
+....
+options COM_MULTIPORT
+....
++
+to the config file.
++
+. Where the current `device sio__n__` lines are, you will need to add 16 more devices. The following example is for a Boca Board with an interrupt of 3, and a base IO address 100h. The IO address for Each port is +8 hexadecimal from the previous port, thus the 100h, 108h, 110h... addresses.
++
+[.programlisting]
+....
+device sio1 at isa? port 0x100 flags 0x1005
+device sio2 at isa? port 0x108 flags 0x1005
+device sio3 at isa? port 0x110 flags 0x1005
+device sio4 at isa? port 0x118 flags 0x1005
+…
+device sio15 at isa? port 0x170 flags 0x1005
+device sio16 at isa? port 0x178 flags 0x1005 irq 3
+....
++ 
+The flags entry _must_ be changed from this example unless you are using the exact same sio assignments. Flags are set according to 0x__MYY__ where _M_ indicates the minor number of the master port (the last port on a Boca 16) and _YY_ indicates if FIFO is enabled or disabled(enabled), IRQ sharing is used(yes) and if there is an AST/4 compatible IRQ control register(no). In this example, 
++
+[.programlisting]
+....
+ flags
+	      0x1005
+....
++
+indicates that the master port is sio16. If I added another board and assigned sio17 through sio28, the flags for all 16 ports on _that_ board would be 0x1C05, where 1C indicates the minor number of the master port. Do not change the 05 setting.
++
+. Save and complete the kernel configuration, recompile, install and reboot. Presuming you have successfully installed the recompiled kernel and have it set to the correct address and IRQ, your boot message should indicate the successful probe of the Boca ports as follows: (obviously the sio numbers, IO and IRQ could be different)
++
+[source,bash]
+....
+sio1 at 0x100-0x107 flags 0x1005 on isa
+sio1: type 16550A (multiport)
+sio2 at 0x108-0x10f flags 0x1005 on isa
+sio2: type 16550A (multiport)
+sio3 at 0x110-0x117 flags 0x1005 on isa
+sio3: type 16550A (multiport)
+sio4 at 0x118-0x11f flags 0x1005 on isa
+sio4: type 16550A (multiport)
+sio5 at 0x120-0x127 flags 0x1005 on isa
+sio5: type 16550A (multiport)
+sio6 at 0x128-0x12f flags 0x1005 on isa
+sio6: type 16550A (multiport)
+sio7 at 0x130-0x137 flags 0x1005 on isa
+sio7: type 16550A (multiport)
+sio8 at 0x138-0x13f flags 0x1005 on isa
+sio8: type 16550A (multiport)
+sio9 at 0x140-0x147 flags 0x1005 on isa
+sio9: type 16550A (multiport)
+sio10 at 0x148-0x14f flags 0x1005 on isa
+sio10: type 16550A (multiport)
+sio11 at 0x150-0x157 flags 0x1005 on isa
+sio11: type 16550A (multiport)
+sio12 at 0x158-0x15f flags 0x1005 on isa
+sio12: type 16550A (multiport)
+sio13 at 0x160-0x167 flags 0x1005 on isa
+sio13: type 16550A (multiport)
+sio14 at 0x168-0x16f flags 0x1005 on isa
+sio14: type 16550A (multiport)
+sio15 at 0x170-0x177 flags 0x1005 on isa
+sio15: type 16550A (multiport)
+sio16 at 0x178-0x17f irq 3 flags 0x1005 on isa
+sio16: type 16550A (multiport master)
+....
++ 
+If the messages go by too fast to see, 
++
+[source,bash]
+....
+# dmesg | more
+....
++
+will show you the boot messages.
++
+. Next, appropriate entries in [.filename]#/dev# for the devices must be made using the [.filename]#/dev/MAKEDEV# script. This step can be omitted if you are running FreeBSD{nbsp}5.X with a kernel that has man:devfs[5] support compiled in.
++ 
+If you do need to create the [.filename]#/dev# entries, run the following as `root`:
++
+[source,bash]
+....
+# cd /dev
+# ./MAKEDEV tty1
+# ./MAKEDEV cua1
+(everything in between)
+# ./MAKEDEV ttyg
+# ./MAKEDEV cuag
+....
++ 
+If you do not want or need call-out devices for some reason, you can dispense with making the [.filename]#cua*# devices.
+. If you want a quick and sloppy way to make sure the devices are working, you can simply plug a modem into each port and (as root) 
++
+[source,bash]
+....
+# echo at > ttyd*
+....
+
+for each device you have made. You _should_ see the RX lights flash for each working port.
+
+====
+
+=== Support for Cheap Multi-UART Cards
+
+_Contributed by Helge Oldach mailto:hmo@sep.hamburg.com[hmo@sep.hamburg.com], September 1999_
+
+Ever wondered about FreeBSD support for your 20$ multi-I/O card with two (or more) COM ports, sharing IRQs? Here is how:
+
+Usually the only option to support these kind of boards is to use a distinct IRQ for each port. For example, if your CPU board has an on-board [.filename]#COM1# port (aka [.filename]#sio0#–I/O address 0x3F8 and IRQ 4) and you have an extension board with two UARTs, you will commonly need to configure them as [.filename]#COM2# (aka [.filename]#sio1#–I/O address 0x2F8 and IRQ 3), and the third port (aka [.filename]#sio2#) as I/O 0x3E8 and IRQ 5. Obviously this is a waste of IRQ resources, as it should be basically possible to run both extension board ports using a single IRQ with the `COM_MULTIPORT` configuration described in the previous sections.
+
+Such cheap I/O boards commonly have a 4 by 3 jumper matrix for the COM ports, similar to the following:
+
+[.programlisting]
+....
+            o  o  o  *
+Port A               |
+            o  *  o  *
+Port B         |
+            o  *  o  o
+IRQ         2  3  4  5
+....
+
+Shown here is port A wired for IRQ 5 and port B wired for IRQ 3. The IRQ columns on your specific board may vary--other boards may supply jumpers for IRQs 3, 4, 5, and 7 instead.
+
+One could conclude that wiring both ports for IRQ 3 using a handcrafted wire-made jumper covering all three connection points in the IRQ 3 column would solve the issue, but no. You cannot duplicate IRQ 3 because the output drivers of each UART are wired in a "totem pole" fashion, so if one of the UARTs drives IRQ 3, the output signal will not be what you would expect. Depending on the implementation of the extension board or your motherboard, the IRQ 3 line will continuously stay up, or always stay low.
+
+You need to decouple the IRQ drivers for the two UARTs, so that the IRQ line of the board only goes up if (and only if) one of the UARTs asserts a IRQ, and stays low otherwise. The solution was proposed by Joerg Wunsch mailto:j@ida.interface-business.de[j@ida.interface-business.de]: To solder up a wired-or consisting of two diodes (Germanium or Schottky-types strongly preferred) and a 1 kOhm resistor. Here is the schematic, starting from the 4 by 3 jumper field above:
+
+[.programlisting]
+....
+                          Diode
+                +---------->|-------+
+               /                    |
+            o  *  o  o              |     1 kOhm
+Port A                              +----|######|-------+
+            o  *  o  o              |                   |
+Port B          `-------------------+                 ==+==
+            o  *  o  o              |                 Ground
+                \                   |
+                 +--------->|-------+
+IRQ         2  3  4  5    Diode
+....
+
+The cathodes of the diodes are connected to a common point, together with a 1 kOhm pull-down resistor. It is essential to connect the resistor to ground to avoid floating of the IRQ line on the bus.
+
+Now we are ready to configure a kernel. Staying with this example, we would configure:
+
+[.programlisting]
+....
+# standard on-board COM1 port
+device          sio0    at isa? port "IO_COM1" flags 0x10
+# patched-up multi-I/O extension board
+options         COM_MULTIPORT
+device          sio1    at isa? port "IO_COM2" flags 0x205
+device          sio2    at isa? port "IO_COM3" flags 0x205 irq 3
+....
+
+Note that the `flags` setting for [.filename]#sio1# and [.filename]#sio2# is truly essential; refer to man:sio[4] for details. (Generally, the `2` in the "flags" attribute refers to [.filename]##sio##2 which holds the IRQ, and you surely want a `5` low nibble.) With kernel verbose mode turned on this should yield something similar to this:
+
+[source,bash]
+....
+sio0: irq maps: 0x1 0x11 0x1 0x1
+sio0 at 0x3f8-0x3ff irq 4 flags 0x10 on isa
+sio0: type 16550A
+sio1: irq maps: 0x1 0x9 0x1 0x1
+sio1 at 0x2f8-0x2ff flags 0x205 on isa
+sio1: type 16550A (multiport)
+sio2: irq maps: 0x1 0x9 0x1 0x1
+sio2 at 0x3e8-0x3ef irq 3 flags 0x205 on isa
+sio2: type 16550A (multiport master)
+....
+
+Though [.filename]#/sys/i386/isa/sio.c# is somewhat cryptic with its use of the "irq maps" array above, the basic idea is that you observe `0x1` in the first, third, and fourth place. This means that the corresponding IRQ was set upon output and cleared after, which is just what we would expect. If your kernel does not display this behavior, most likely there is something wrong with your wiring.
+
+[[cy]]
+== Configuring the [.filename]#cy# driver
+
+_Contributed by Alex Nash. 6 June 1996._
+
+The Cyclades multiport cards are based on the [.filename]#cy# driver instead of the usual [.filename]#sio# driver used by other multiport cards. Configuration is a simple matter of:
+
+[.procedure]
+. Add the [.filename]#cy# device to your kernel configuration (note that your irq and iomem settings may differ).
++
+[.programlisting]
+....
+device cy0 at isa? irq 10 iomem 0xd4000 iosiz 0x2000
+....
+
+. Rebuild and install the new kernel.
+. Make the device nodes by typing (the following example assumes an 8-port board):
++
+[source,bash]
+....
+# cd /dev
+# for i in 0 1 2 3 4 5 6 7;do ./MAKEDEV cuac$i ttyc$i;done
+....
+
+. If appropriate, add dialup entries to [.filename]#/etc/ttys# by duplicating serial device (`ttyd`) entries and using `ttyc` in place of `ttyd`. For example:
++
+[.programlisting]
+....
+ttyc0   "/usr/libexec/getty std.38400"  unknown on insecure
+ttyc1   "/usr/libexec/getty std.38400"  unknown on insecure
+ttyc2   "/usr/libexec/getty std.38400"  unknown on insecure
+…
+ttyc7   "/usr/libexec/getty std.38400"  unknown on insecure
+....
+
+. Reboot with the new kernel.
+
+== Configuring the [.filename]#si# driver
+
+_Contributed by Nick Sayer mailto:nsayer@FreeBSD.org[nsayer@FreeBSD.org]. 25 March 1998._
+
+The Specialix SI/XIO and SX multiport cards use the [.filename]#si# driver. A single machine can have up to 4 host cards. The following host cards are supported:
+
+* ISA SI/XIO host card (2 versions)
+* EISA SI/XIO host card
+* PCI SI/XIO host card
+* ISA SX host card
+* PCI SX host card
+
+Although the SX and SI/XIO host cards look markedly different, their functionality are basically the same. The host cards do not use I/O locations, but instead require a 32K chunk of memory. The factory configuration for ISA cards places this at `0xd0000-0xd7fff`. They also require an IRQ. PCI cards will, of course, auto-configure themselves.
+
+You can attach up to 4 external modules to each host card. The external modules contain either 4 or 8 serial ports. They come in the following varieties:
+
+* SI 4 or 8 port modules. Up to 57600 bps on each port supported.
+* XIO 8 port modules. Up to 115200 bps on each port supported. One type of XIO module has 7 serial and 1 parallel port.
+* SXDC 8 port modules. Up to 921600 bps on each port supported. Like XIO, a module is available with one parallel port as well.
+
+To configure an ISA host card, add the following line to your kernel configuration file, changing the numbers as appropriate:
+
+[.programlisting]
+....
+device si0 at isa? iomem 0xd0000 irq 11
+....
+
+Valid IRQ numbers are 9, 10, 11, 12 and 15 for SX ISA host cards and 11, 12 and 15 for SI/XIO ISA host cards.
+
+To configure an EISA or PCI host card, use this line:
+
+[.programlisting]
+....
+device si0
+....
+
+After adding the configuration entry, rebuild and install your new kernel.
+
+[NOTE]
+====
+The following step, is not necessary if you are using man:devfs[5] in FreeBSD 5._X_.
+====
+
+After rebooting with the new kernel, you need to make the device nodes in [.filename]#/dev#. The [.filename]#MAKEDEV# script will take care of this for you. Count how many total ports you have and type:
+
+[source,bash]
+....
+# cd /dev
+# ./MAKEDEV ttyAnn cuaAnn
+....
+
+(where _nn_ is the number of ports)
+
+If you want login prompts to appear on these ports, you will need to add lines like this to [.filename]#/etc/ttys#:
+
+[.programlisting]
+....
+ttyA01  "/usr/libexec/getty std.9600"   vt100   on insecure
+....
+
+Change the terminal type as appropriate. For modems, `dialup` or `unknown` is fine.
