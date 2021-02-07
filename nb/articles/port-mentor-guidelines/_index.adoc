@@ -1,0 +1,93 @@
+---
+title: Port Mentor Retningslinjer
+authors: 
+releaseinfo: "$FreeBSD$" 
+---
+
+= Port Mentor Retningslinjer
+:doctype: article
+:toc: macro
+:toclevels: 1
+:icons: font
+:sectnums:
+:sectnumlevels: 6
+:source-highlighter: rouge
+:experimental:
+
+'''
+
+toc::[]
+
+[[port-mentor-guidelines]]
+== Retningslinje for Mentor / Mentee Relasjoner
+
+Denne delen skal hjelpe demystifisere veiledningsprosessen, samt en måte å åpenlyst fremme en konstruktiv diskusjon for å tilpasse og utvide retningslinjene. I våres liv har vi for mange regler; Vi er ikke en regjeringsorganisasjon som påvirker regelverk, men heller et kollektiv av likesinnede personer som arbeider mot et felles mål, og opprettholder kvalitetssikringen av produktet vi kaller Ports Tree.
+
+[[why-mentor]]
+=== Hvorfor akkurat Mentor?
+
+* For de fleste av oss ble vi mentorisert inn i FreeBSD prosjektet, så returner tjenesten ved å tilby å veilede noen andre inn.
+* Du har en uimotståelig trang til å dele kunnskap med andre.
+* Den vanlige straffen gjelder fordi du er syk og lei av å begå andres gode arbeid!
+
+[[mentor-comentor]]
+=== Mentor/Co-Mentor
+
+Grunn for et samarbeids mentorskap:
+
+* Signifikante tidssone forskjeller. Tilgjengelige, interaktive mentor(er) tilgjengelig via IM er ekstremt nyttig!
+* Potensiell språkbarriere. Ja, FreeBSD er veldig engelsk orientert, også programvareutvikling, men å ha en mentor som kan snakke et morsmål kan være svært nyttig.
+* Inntil det er en 30-timers dag og en 8-dagers uke, har noen av oss bare så mye tid til å gi. Å dele denne belastningen med noen andre vil gjøre det enklere for alle.
+* En nybegynner mentor kan dra nytte av opplevelser/erfaringer av en senior committer/mentor.
+* To hoder tenker bedre enn et.
+
+Grunner for solo mentorskap:
+
+* Du klarer ikke oppføre deg bra mot andre eller samarbeide med andre.
+* Du foretrekker å ha et en-mot-en forhold/relasjon.
+* Årsakene til co-mentorskap gjelder ikke for deg.
+
+[[mentor-expectations]]
+=== Forventninger
+
+Vi forventer at veiledere vurderer og testbygger alle foreslåtte oppdateringer, i hvert fall for en innledende periode som varer mer enn en uke eller to.
+
+Vi forventer at mentorer skal ta ansvar for handlinger fra deres mentee. En mentor bør følge opp med alle forpliktelser som menteer gjør, både godkjent og implisitt.
+
+Vi forventer mentorer for å sikre at deres mentees leser link:{porters-handbook}[Porter's Handbook], link:{pr-guidelines}[PR handling guide], og link:{committers-guide}[Committer's Guide]. Selv om det ikke er nødvendig å huske alle detaljer, må alle kommittere ha en oversikt over disse tingene som en effektiv del av samfunnet (og unngå så mange rookie feil som overhode mulig).
+
+[[mentees]]
+=== Velge en Mentee
+
+Det er ingen definert regel for hva som gjør en kandidat klar; det kan være en kombinasjon av antall PR som de har sendt inn, antall porter opprettholdt, oppdatering av porter, og/eller deltakelse i et bestemt område som GNOME, KDE,Gecko eller andre.
+
+En kandidat bør ha nesten ikke ha timeouts, bør være responsiv på forespørsler og generelt nyttig for å støtte sine port utgivelser.
+
+Det må være en historie med engasjement, da det er allment forstått at det å lære opp en kommitter krever tid og krefter. Hvis noen har holdt på lenger, og brukt tiden på å observere hvordan ting er gjort, er det en viss forventning om akkumulert kunnskap. Altfor ofte har vi sett en maintainer sende inn noen PR, for å så derette dukke opp i IRC og spør når de skal få en forpliktelsebit.
+
+Å abonnere på, og følge adresselister er veldig gunstig. Det er ingen reell forventning om at innlevering av innlegg på listene vil gjøre noen til en kommitter, men det viser en viss forpliktelse. Noen eposter gir innsikt i kunnskapen en kandidat innehaver i tillegg til hvordan de samhandler med andre. Tilsvarende deltagelse i IRC kan gi noen en høyere profil og kan gjøre at man lettere blir lagt merke til.
+
+Spør seks forskjellige kommitterer hvor mange PR som en vedlikeholder skal sende før de blir nominert, og du vil garantert få seks forskjellige svar. Spør de samme personene hvor lenge noen burde ha deltatt, og du vil få samme dilemma. Hvor mange porter skal de ha på et minimum? samme dilemma der og. Noen ting er bare vanskelig å kvantifisere, en mentor må bare bruke sin beste dømmekraft, og håpe at portmgr er enig.
+
+[[mentorship-duration]]
+=== Mentorskapets varighet
+
+Etter hvert som tillitsnivået utvikler seg og vokser, kan en mentee bli gitt "implisitt" commit rettigheter. Dette kan inneholde trivielle endringer i et [.filename]#Makefile#, [.filename]#pkg-descr# etc. På samme måte kan det inneholde `PORTVERSION` oppdateringer som ikke inkluderer `plist` endringer. Andre omstendigheter kan formuleres etter Mentorens oppførsel og vurdering. I løpet av perioden med mentorskap, bør en portversjons bump som påvirker avhengige porter, kontrolleres av en mentor.
+
+Akkurat som vi er alle forskjellige individer, har hver mentee forskjellige læringskurver, tidsforpliktelser og andre påvirkningsfaktorer som vil bidra til tiden som kreves før de kan "jobbe solo". Empirisk bør en mentee observeres i minst 3 måneder. 90-100 commits er et annet mål som en mentor kan bruke før du frigjør en mentee. Andre faktorer for å vurdere tidligere utgivelse av en mentee er antall feil de måtte ha gjort, QATs mottatt etc. Hvis de fortsatt gjør nybegynnerfeil, krever de fortsatt mentorveiledning.
+
+[[mentor-comentor-debate]]
+=== Mentor/Co-Mentor Debatt
+
+Når en forespørsel kommer til portmgr, leses den vanligvis som, " Jeg foreslår 'foo' for en portforbindelse, jeg vil være co-mentor med 'bar' ". Forslag mottatt, stemt og tatt videre.
+
+Mentoren er det primære kontaktpunktet eller "først blant likeverdige", co-mentoren er backupen.
+
+Noen klandrede, hvis navn skal holdes tilbake, gjorde https://lists.freebsd.org/pipermail/cvs-ports/2007-September/134614.html[første registrerte co-mentor commit]. Lignende co-mentorforbindelser har også blitt oppdaget i src-treet. Gjøres dette det riktig? Gjøres dette feil? Det ser ut til å være en del av utviklingen av hvordan ting gjøres.
+
+[[mentee-expectations]]
+=== Forventninger
+
+Vi forventer at mentees skal være forberedt på konstruktiv kritikk fra samfunnet. Det er fortsatt mye "kjennskap" som ikke er direkteskrevet ned. Å svare godt på konstruktiv kritikk er det vi håper vi velger etter ved å først gjennomgå deres eksisterende bidrag på IRC og postlister.
+
+Vi advarer mentees om at noe av kritikken de mottar, kan være mindre "konstruktiv" enn andre (enten gjennom språkkommunikasjonsproblemer eller overdreven flisespikking), og at det å håndtere dette grasiøst bare er en del av å være i et stort samfunn. I tilfelle det er konkrete problemer med bestemte personer eller spørsmål, håper vi at de vil nærme seg et portmgr-medlem på IRC eller via e-post.

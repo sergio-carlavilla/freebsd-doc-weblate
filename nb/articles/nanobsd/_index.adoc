@@ -1,0 +1,292 @@
+---
+title: Introduksjon til NanoBSD
+authors: 
+releaseinfo: "$FreeBSD$" 
+trademarks: [] 
+---
+
+= Introduksjon til NanoBSD
+:doctype: article
+:toc: macro
+:toclevels: 1
+:icons: font
+:sectnums:
+:sectnumlevels: 6
+:source-highlighter: rouge
+:experimental:
+
+[.abstract-title]
+Abstract
+
+Dette dokumentet inneholder informasjon om NanoBSD-verktøyene, som kan brukes til å lage FreeBSD-systembilder for innebygde applikasjoner, egnet for bruk på et Compact Flash-kort (eller annet masselagringsmedium).
+
+'''
+
+toc::[]
+
+[[intro]]
+== Introduksjon til NanoBSD
+
+NanoBSD er et verktøy som for øyeblikket er utviklet av Poul-Henning Kamp mailto:phk@FreeBSD.org[phk@FreeBSD.org]. Det skaper et FreeBSD-systembilde for innebygde applikasjoner, egnet for bruk på et Compact Flash-kort (eller annet masselagringsmedium).
+
+Den kan brukes til å lage spesialiserte installasjonsbilder, designet for enkel installasjon og vedlikehold av systemer som ofte kalles "datamaskinapparater". Datamaskiner er utstyrt med maskinvaren og programvaren i produktet, noe som betyr at alle applikasjoner er forhåndsinstallert. Apparatet er koblet til et eksisterende nettverk og kan begynne å fungere (nesten) umiddelbart.
+
+Funksjonene til NanoBSD inkluderer:
+
+* Porter og pakker fungerer som i FreeBSD - Hvert enkelt program kan installeres og brukes i et NanoBSD-bilde, på samme måte som i FreeBSD.
+* ngen manglende funksjonalitet - Hvis det er mulig å gjøre noe med FreeBSD, er det mulig å gjøre det samme med NanoBSD, med mindre den spesifikke funksjonen eller funksjonene eksplisitt ble fjernet fra NanoBSD bilde da det ble opprettet.
+* Alt er skrivebeskyttet under kjøretid - Det er trygt å trekke i støpselet. Det er ingen nødvendighet å kjøre man:fsck[8] etter en ikke-grasiøs avslutning av systemet.
+* Lett å bygge og tilpasse - Ved å bruke bare ett skallskript og en konfigurasjonsfil er det mulig å lage reduserte og tilpassede bilder som tilfredsstiller ethvert vilkårlig sett med krav.
+
+[[howto]]
+== NanoBSD Howto
+
+[[design]]
+=== Designet til NanoBSD
+
+Når bildet er tilstede på mediet, er det mulig å starte NanoBSD. Masselagringsmediet er delt inn i tre deler som standard:
+
+* To bilde partisjoner: `code#1` og `code#2`.
+* Konfigurasjonsfilpartisjonen, som kan monteres under katalogen [.filename]#/cfg# på kjøretid.
+
+Disse partisjonene er normalt montert skrivebeskyttet.
+
+[.filename]#/etc# og [.filename]#/var# katalogene erman:md[4] (malloc) disk.
+
+Konfigurasjonsfilpartisjonen vedvarer under katalogen [.filename]#/cfg#. Den inneholder filer for [.filename]#/etc# katalogen og er kortmontert skrivebeskyttet rett etter systemstart, derfor er det påkrevd å kopiere endrede filer fra [.filename]#/etc# tilbake til [.filename]#/cfg# katalog hvis endringer forventes å vedvare etter at systemet starter på nytt.
+
+.Foreta vedvarende endringer til [.filename]#/etc/resolv.conf#
+[example]
+====
+
+[source,bash]
+....
+# vi /etc/resolv.conf
+[...]
+# mount /cfg
+# cp /etc/resolv.conf /cfg
+# umount /cfg
+....
+
+====
+
+[NOTE]
+====
+Partisjonen som inneholder [.filename]#/cfg# skal bare monteres ved starttid og samtidig overstyre konfigurasjonsfilene.
+
+Å holde [.filename]#/cfg# montert til enhver tid er ikke en god idé, spesielt hvis NanoBSD-systemet kjører av et masselagringsmedium som kan påvirkes negativt av et stort antall skriver til partisjonen (som når filsystemssynkronen skyller data til systemets disker).
+====
+
+=== Bygge et NanoBSD avbildning
+
+Et NanoBSD-bilde er bygget ved hjelp av et enkelt [.filename]#nanobsd.sh# shell-skript, som du finner i [.filename]#/usr/src/tools/tools/nanobsd# katalogen. Dette skriptet lager et bilde som kan kopieres på lagringsmediet ved å bruke verktøyet man:dd[1].
+
+De nødvendige kommandoene for å lage et NanoBSD-bilde er:
+
+[source,bash]
+....
+# cd /usr/src/tools/tools/nanobsd <.>
+# sh nanobsd.sh <.>
+# cd /usr/obj/nanobsd.full <.>
+# dd if=_.disk.full of=/dev/da0 bs=64k <.>
+....
+
+<.> Endre den gjeldende katalogen til basekatalogen til NanoBSD bygge script..
+<.> Start byggeprosessen
+<.> Endre gjeldende katalog til stedet der de innebygde bildene befinner seg.
+<.> Installer NanoBSD på lagrings mediumet.
+
+=== Tilpasse en NanoBSD avbildning
+
+Dette er sannsynligvis den viktigste og mest interessante egenskapen til NanoBSD. Det er også her du vil tilbringe mesteparten av tiden når du utvikler med NanoBSD.
+
+Påkalling av følgende kommando vil tvinge [.filename]#nanobsd.sh# til å lese konfigurasjonen fra [.filename]#myconf.nano# som ligger i den gjeldende katalogen:
+
+[source,bash]
+....
+# sh nanobsd.sh -c myconf.nano
+....
+
+Tilpasning gjøres på to måter:
+
+* Konfigurasjonsalternativer
+* Tilpassede funksjoner
+
+==== Konfigurasjonsalternativer
+
+Med konfigurasjonsinnstillinger er det mulig å konfigurere alternativer som sendes til `buildworld` og `installworld` stadiene i NanoBSD build prosessen, så vel som interne alternativer gått til hovedbyggingsprosessen for NanoBSD. Gjennom disse alternativene er det mulig å kutte systemet ned, så det får plass til så lite som 64MB. Du kan bruke konfigurasjonsalternativene til å trimme ned FreeBSD enda mer, til den vil bestå av bare kjernen og to eller tre filer i brukerlandet.
+
+Konfigurasjonsfilen består av konfigurasjonsalternativer, som overstyrer standardverdiene. De viktigste direktivene er:
+
+* `NANO_NAME` -- Navn på bygget (brukes for å opprette arbeids katalog navn).
+* `NANO_SRC` -- Sti til kildetreet som ble brukt til å bygge bildet.
+* `NANO_KERNEL` -- Navn på kjernekonfigurasjonsfil som ble brukt til å bygge kjernen.
+* `CONF_BUILD` -- Alternativer som er gitt til `buildworld` stadiet av bygget.
+* `CONF_INSTALL` -- Alternativer som er gitt til `installworld` stadiet av bygget.
+* `CONF_WORLD` -- Alternativene som ble gitt til både `buildworld` og det `installworld` stadiet av builden.
+* `FlashDevice` -- Definerer hvilken type media du vil bruke. Sjekk [.filename]#FlashDevice.sub# for mer informasjon.
+
+==== Tilpassede funksjoner
+
+Det er mulig å finjustere NanoBSD ved bruk av shell-funksjoner i konfigurasjonsfilen. Følgende eksempel illustrerer grunnleggende modell for tilpassede funksjoner:
+
+[.programlisting]
+....
+cust_foo () (
+	echo "bar=baz" > \
+		${NANO_WORLDDIR}/etc/foo
+)
+customize_cmd cust_foo
+....
+
+Et mer nyttig eksempel på en tilpasningsfunksjon er følgende, som endrer standardstørrelse på [.filename]#/etc# katalogen fra 5MB til 30MB:
+
+[.programlisting]
+....
+cust_etc_size () (
+	cd ${NANO_WORLDDIR}/conf
+	echo 30000 > default/etc/md_size
+)
+customize_cmd cust_etc_size
+....
+
+Det er noen få forhåndsdefinerte tilpasningsfunksjoner som er klare til bruk:
+
+* `cust_comconsole` -- Deaktiverer man:getty[8] på VGA enheter ([.filename]#/dev/ttyv*# enhetsnoder) og muliggjør bruk av seriell COM1-port som systemkonsoll.
+* `cust_allow_ssh_root` -- Tillater `root` til å logge inn via man:sshd[8].
+* `cust_install_files` -- Installerer filer fra [.filename]#nanobsd/Files# katalogen, som inneholder noen nyttige skript for systemadministrasjon.
+
+==== Legge til pakker
+
+Pakker kan legges til et NanoBSD-bilde ved hjelp av en tilpasset funksjon. Følgende funksjon vil installere alle pakkene som ligger i [.filename]#/usr/src/tools/tools/nanobsd/packages#:
+
+[.programlisting]
+....
+install_packages () (
+mkdir -p ${NANO_WORLDDIR}/packages
+cp /usr/src/tools/tools/nanobsd/packages/* ${NANO_WORLDDIR}/packages
+cp $(which pkg-static) ${NANO_WORLDDIR}/
+chroot ${NANO_WORLDDIR} sh -c 'cd packages; /pkg-static add *;cd ..;'
+rm -rf ${NANO_WORLDDIR}/packages ${NANO_WORLDDIR}/pkg-static
+)
+customize_cmd install_packages
+....
+
+==== Eksempel på konfigurasjonsfil
+
+Et komplett eksempel på en konfigurasjonsfil for å lage et tilpasset NanoBSD-bilde kan være:
+
+[.programlisting]
+....
+NANO_NAME=custom
+NANO_SRC=/usr/src
+NANO_KERNEL=MYKERNEL
+NANO_IMAGES=2
+
+CONF_BUILD='
+WITHOUT_KLDLOAD=YES
+WITHOUT_NETGRAPH=YES
+WITHOUT_PAM=YES
+'
+
+CONF_INSTALL='
+WITHOUT_ACPI=YES
+WITHOUT_BLUETOOTH=YES
+WITHOUT_FORTRAN=YES
+WITHOUT_HTML=YES
+WITHOUT_LPR=YES
+WITHOUT_MAN=YES
+WITHOUT_SENDMAIL=YES
+WITHOUT_SHAREDOCS=YES
+WITHOUT_EXAMPLES=YES
+WITHOUT_INSTALLLIB=YES
+WITHOUT_CALENDAR=YES
+WITHOUT_MISC=YES
+WITHOUT_SHARE=YES
+'
+
+CONF_WORLD='
+WITHOUT_BIND=YES
+WITHOUT_MODULES=YES
+WITHOUT_KERBEROS=YES
+WITHOUT_GAMES=YES
+WITHOUT_RESCUE=YES
+WITHOUT_LOCALES=YES
+WITHOUT_SYSCONS=YES
+WITHOUT_INFO=YES
+'
+
+FlashDevice SanDisk 1G
+
+cust_nobeastie() (
+	touch ${NANO_WORLDDIR}/boot/loader.conf
+	echo "beastie_disable=\"YES\"" >> ${NANO_WORLDDIR}/boot/loader.conf
+)
+
+customize_cmd cust_comconsole
+customize_cmd cust_install_files
+customize_cmd cust_allow_ssh_root
+customize_cmd cust_nobeastie
+....
+
+=== Oppdatere NanoBSD
+
+Oppdateringsprosessen av NanoBSD er relativt simpelt:
+
+[.procedure]
+. Bygg et nytt NanoBSD-bilde, som vanlig.
+. Last opp det nye bildet til en ubrukt partisjon av et kjørende NanoBSD-apparat.
++ 
+Den viktigste forskjellen på dette trinnet fra den første NanoBSD-installasjonen er at nå i stedet for å bruke [.filename]#_.disk.full# (som inneholder et bilde av hele disken), [.filename]#_.disk.image# bilde er installert (som inneholder et bilde av en enkel systempartisjon).
+. Start på nytt, og start systemet fra den nylig installerte partisjonen.
+. Hvis alt går bra, er oppgraderingen ferdig.
+. Hvis noe går galt, start du på nytt inn i den forrige partisjonen (som inneholder det gamle, fungerende bildet), for å gjenopprette systemfunksjonaliteten så raskt som mulig. Løs eventuelle problemer med nybygget, og gjenta prosessen.
+
+For å installere nytt bilde på det kjørende NanoBSD-systemet, er det mulig å bruke [.filename]#updatep1# eller [.filename]#updatep2#-skriptet som ligger i [.filename]#/root# katalogen, avhengig av hvilken partisjon som kjører det gjeldende systemet.
+
+I henhold til hvilke tjenester som er tilgjengelige på verten som serverer nytt NanoBSD-bilde og hvilken type overføring som er foretrukket, er det mulig å undersøke en av disse tre måtene:
+
+==== Bruke man:ftp[1]
+
+Hvis overføringshastigheten er i utgangspunktet, bruk dette eksemplet:
+
+[source,bash]
+....
+# ftp myhost
+get _.disk.image "| sh updatep1"
+....
+
+==== Bruke man:ssh[1]
+
+Hvis du foretrekker en sikker overføring, kan du vurdere å bruke dette eksemplet:
+
+[source,bash]
+....
+# ssh myhost cat _.disk.image.gz | zcat | sh updatep1
+....
+
+==== Bruke man:nc[1]
+
+Prøv dette eksemplet hvis den eksterne verten ikke kjører man:ftpd[8] eller man:sshd[8] tjeneste:
+
+[.procedure]
+====
+. Først åpner du en TCP-lytter på verten som serverer bildet og får det til å sende bildet til klienten:
++
+[source,bash]
+....
+myhost# nc -l 2222 < _.disk.image
+....
++
+[NOTE]
+======
+Forsikre deg om at den brukte porten ikke er blokkert for å motta innkommende tilkoblinger fra NanoBSD vert med brannmur.
+======
++
+. Koble til verten som serverer nytt bilde og kjør [.filename]#updatep1# skript:
++
+[source,bash]
+....
+# nc myhost 2222 | sh updatep1
+....
+====
