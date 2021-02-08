@@ -55,7 +55,7 @@ Cada programa en ejecución constituye un proceso que representa un estado del c
 [[kern-proc-comm]]
 ==== Comunicación entre el kernel y el proceso de espacio de usuario
 
-Common UNIX(TM) API defines a syscall as a way to issue commands from a user space process to the kernel. The most common implementation is either by using an interrupt or specialized instruction (think of `SYSENTER`/`SYSCALL` instructions for ia32). Syscalls are defined by a number. For example in FreeBSD, the syscall number{nbsp}85 is the man:swapon[2] syscall and the syscall number{nbsp}132 is man:mkfifo[2]. Some syscalls need parameters, which are passed from the user-space to the kernel-space in various ways (implementation dependant). Syscalls are synchronous.
+Common UNIX(TM) API defines a syscall as a way to issue commands from a user space process to the kernel. The most common implementation is either by using an interrupt or specialized instruction (think of `SYSENTER`/`SYSCALL` instructions for ia32). Syscalls are defined by a number. For example in FreeBSD, the syscall number 85 is the man:swapon[2] syscall and the syscall number 132 is man:mkfifo[2]. Some syscalls need parameters, which are passed from the user-space to the kernel-space in various ways (implementation dependant). Syscalls are synchronous.
 
 Otra forma posible de comunicarse es mediante un _trap_ Las trampas ocurren de forma asincrónica después de que ocurre algún evento (división por cero, falla de página, etc.). Una trampa puede ser transparente para un proceso (error de página) o puede resultar en una reacción como enviar una _signal_ (división por cero).
 

@@ -1,0 +1,328 @@
+---
+title: Produkte mit FreeBSD entwickeln
+authors:
+  - author: Joseph Koshy
+    email: jkoshy@FreeBSD.org
+organizations:
+  - organization: The FreeBSD Project
+releaseinfo: "$FreeBSD$" 
+trademarks: ["freebsd", "general"]
+---
+
+= Produkte mit FreeBSD entwickeln
+:doctype: article
+:toc: macro
+:toclevels: 1
+:icons: font
+:sectnums:
+:sectnumlevels: 6
+:source-highlighter: rouge
+:experimental:
+
+include::shared/releases.adoc[]
+include::shared/de/mailing-lists.adoc[]
+include::shared/de/urls.adoc[]
+
+ifeval::["{backend}" == "html5"]
+:imagesdir: ../../../images/articles/building-products/
+endif::[]
+
+ifeval::["{backend}" == "pdf"]
+:imagesdir: ../../../../static/images/articles/building-products/
+endif::[]
+
+ifeval::["{backend}" == "epub3"]
+:imagesdir: ../../../../static/images/articles/building-products/
+endif::[]
+
+[.abstract-title]
+Zusammenfassung
+
+Das FreeBSD Project ist ein weltweites, von Freiwilligen getragenes und kollaboratives Projekt, das ein portables und qualitativ hochwertiges Betriebssystem entwickelt. Das FreeBSD-Projekt verteilt den Quellcode seines Produkts unter einer liberalen Lizenz, um die Verbreitung seines Codes zu fördern. Durch eine Zusammenarbeit mit dem FreeBSD-Projekt können Unternehmen die Zeit bis zur Markteinführung verkürzen, die Entwicklungskosten senken und die Qualität ihrer Produkte verbessern.
+
+Dieser Artikel untersucht die Probleme bei der Verwendung von FreeBSD-Code in Geräten und Softwareprodukten. Er beleuchtet die Eigenschaften von FreeBSD, die es zu einer hervorragenden Grundlage für die Produktentwicklung machen. Der Artikel schließt mit einigen Vorschlägen über "Best Practices" für Unternehmen, die mit dem FreeBSD-Projekt zusammenarbeiten.
+
+'''
+
+toc::[]
+
+[[introduction]]
+== Einleitung
+
+FreeBSD ist heute als leistungsstarkes Serverbetriebssystem bekannt. Es läuft weltweit auf Millionen von Webservern und Internet-Hosts. FreeBSD-Code ist auch ein integraler Bestandteil vieler Produkte, von Geräten wie Netzwerkroutern, Firewalls und Speichergeräten bis hin zu PCs. Teile von FreeBSD wurden auch in handelsüblicher Standardsoftware eingesetzt (siehe <<freebsd-intro>>).
+
+Dieser Artikel betrachtet das link:https://www.FreeBSD.org/[FreeBSD-Projekt] als eine Ressource für die Softwareentwicklung, d. h. als eine Sammlung von Bausteinen und Prozessen, die man zum Bauen und Entwickeln von Produkten verwenden kann.
+
+Zwar steht der FreeBSD-Quelltext der Allgemeinheit frei zur Verfügung, aber damit Unternehmen die Vorteile der Arbeit des Projekts voll ausschöpfen können, ist _Zusammenarbeit_ erforderlich. Die folgenden Abschnitte dieses Artikels erörtern wirksame Arten der Zusammenarbeit mit dem Projekt und die Fallstricke, die es dabei zu vermeiden gilt.
+
+*Hinweis für die Leser und Leserinnen* Der Autor vertritt die Auffassung, dass die in diesem Artikel genannten Eigenschaften des FreeBSD-Projekts grundsätzlich der Wahrheit entsprachen, als der Artikel konzipiert und geschrieben wurde (2005). Der Leser sollte jedoch bedenken, dass sich die Verfahren und Prozesse von Open-Source-Communitys im Laufe der Zeit ändern können und dass die Informationen in diesem Artikel daher eher als Anhaltspunkte statt als in Stein gemeißelt verstanden werden sollten.
+
+=== Zielpublikum
+
+Dieses Dokument richtet sich an folgende Personengruppen:
+
+* Entscheidern im produzierenden Gewerbe, die nach Möglichkeiten suchen, die Qualität ihrer Produkte zu verbessern, die Zeit bis zur Markteinführung zu verkürzen und die Entwicklungskosten langfristig zu senken.
+* IT-Berater, die nach Best-Practice-Beispielen beim Einsatz von "Open-Source" suchen.
+* Branchenbeobachter, die daran interessiert sind, die Dynamik von Open-Source-Projekten zu verstehen.
+* Software-Entwickler, die FreeBSD einsetzen wollen und der Gemeinschaft etwas zurückgeben möchten.
+
+=== Zielsetzung dieses Artikels
+
+Nach der Lektüre dieses Artikels sollten Sie Folgendes gewonnen haben:
+
+* Verständnis über die Ziele des FreeBSD-Projekts und seiner Organisationsstruktur.
+* Verständnis des Entwicklungsmodells und der Release-Engineering-Prozesse.
+* Verständnis dafür, wie sich herkömmliche Prozesse der Software-Entwicklung in Unternehmen von denen des FreeBSD-Projekts unterscheiden.
+* Kenntnisse über die Kommunikationskanäle, die das Projekt nutzt, und den Grad an Transparenz, den Sie erwarten können.
+* Kenntnisse, wie Sie optimal mit dem Projekt zusammenarbeiten können: Wie Sie am besten die Entwicklungskosten senken, die Zeit bis zur Markteinführung verkürzen, Sicherheitslücken schließen und die zukünftige Kompatibilität mit Ihrem Produkt wahren, während sich das FreeBSD-Projekt weiterentwickelt.
+
+=== Gliederung des Artikels
+
+Der Rest des Artikels ist wie folgt gegliedert:
+
+* <<freebsd-intro>> stellt das FreeBSD-Projekt vor, untersucht seine Organisationsstruktur, Schlüsseltechnologien und Release-Engineering-Prozesse.
+* <<freebsd-collaboration>> beschreibt Möglichkeiten der Zusammenarbeit mit dem FreeBSD-Projekt. Der Abschnitt untersucht häufige Fallstricke, auf die Unternehmen bei der Zusammenarbeit mit Freiwilligenprojekten wie FreeBSD stoßen.
+* << conclusion>> fasst die Ergebnisse des Artikels zusammen.
+
+[[freebsd-intro]]
+== FreeBSD als ein Baukastensystem
+
+FreeBSD eignet sich hervorragend als Grundlage für die Entwicklung von Produkten:
+
+* Der FreeBSD-Quellcode wird unter einer liberalen BSD-Lizenz vertrieben, die eine problemlose Übernahme in kommerzielle Produkte <<Mon2005>> ermöglicht.
+* Das FreeBSD-Projekt hat dabei Verfahren nach hervorragender fachlicher Praxis etabliert.
+* Das Projekt zeichnet sich durch eine außergewöhnlich transparente Arbeitsweise aus. Unternehmen, die Code des Projekts nutzen, können so optimal für die Zukunft planen.
+* Die Kultur des FreeBSD-Projekts, die von der Informatik-Forschungsgruppe der kalifornischen Universität Berkeley <<McKu1999-1>>) übernommen wurde, fördert qualitativ hochwertige Arbeit. Einige Funktionen in FreeBSD definieren den Stand der Technik.
+
+<<GoldGab2005>> untersucht die geschäftlichen Gründe für den Einsatz von Open-Source im Detail. Für Unternehmen zählen eine kürzere Produkteinführungszeit, niedrigere Entwicklungskosten und geringere Entwicklungsrisiken zu den Vorteilen, wenn sie Komponenten von FreeBSD in ihren Produkten einsetzen.
+
+=== Entwickeln mit FreeBSD
+
+Hier sind einige Beispiele, wie Unternehmen FreeBSD eingesetzt haben:
+
+* Als Upstream-Quelle für getesteten Code für Bibliotheken und Utilities.
++ 
+Durch die Einbindung in den "Downstream" des Projekts nutzen Organisationen neue Funktionen, Bugfixes und Tests des Upstream-Codes.
+* Als eingebettetes Betriebssystem, zum Beispiel für einen OEM-Router oder eine externe Firewall. Bei diesem Entwicklungskonzept verwenden Unternehmen einen angepassten FreeBSD-Kernel und angepasste Anwendungsprogramme sowie eine proprietäre Verwaltungsschicht für ihr Gerät. OEMs profitieren von der Unterstützung neuer Hardware, die vom Upstream des FreeBSD-Projekts bereitgestellt wird, und davon, dass das Basissystem getestet wird.
++ 
+Im Lieferumfang von FreeBSD ist eine Self-Hosting-Entwicklungsumgebung enthalten, die eine einfache Erstellung solcher Konfigurationen ermöglicht.
+* Als Unix-kompatible Umgebung zum Verwalten von High-End-Speicher- und Netzwerkgeräten, die als separate "Blades" laufen.
++ 
+FreeBSD stellt die Werkzeuge zur Verfügung, um dedizierte Images von Betriebssystemen und Anwendungsprogrammen zu erstellen. Die Implementierung einer BSD-Unix-API ist ausgereift und getestet. FreeBSD ermöglicht auch eine stabile Cross-Entwicklungsumgebung für die anderen Komponenten eines High-End-Geräts.
+* Als Instrument, um von einem weltweiten Entwicklerteam umfassende Tests und Unterstützung für unkritisches "geistiges Eigentum" zu erhalten.
++ 
+Bei diesem Modell stellen Unternehmen dem FreeBSD-Projekt nützliche Infrastrukturen zur Verfügung (siehe zum Beispiel man:netgraph[3]). Da der Code breit eingesetzt wird, lassen sich Performance-Probleme und Fehler schnell identifizieren. Die Beteiligung hochkarätiger Entwickler führt auch zu nützlichen Erweiterungen der Infrastruktur, von denen auch das beitragende Unternehmen profitiert.
+* Als Entwicklungsumgebung zur Cross-Entwicklung für eingebettete Betriebssysteme wie http://www.rtems.com/[RTEMS] und http://ecos.sourceware.org/[eCOS].
++ 
+Die 24.000 Anwendungen umfassende Ports- und Paketsammlung von FreeBSD enthält zahlreiche leistungsfähige Entwicklungsumgebungen.
+* Als Möglichkeit, eine unixoide API in einem ansonsten proprietären Betriebssystem zu unterstützen und damit die Benutzerfreundlichkeit für Anwendungsentwickler zu erhöhen.
++ 
+Hier werden Teile des FreeBSD-Kernels und der Anwendungsprogramme "portiert", um neben anderen Tasks im proprietären Betriebssystem zu laufen. Die Verfügbarkeit einer stabilen und gut getesteten Unix(TM)-API-Implementierung kann den Aufwand für die Portierung verbreiteter Anwendungen auf das proprietäre Betriebssystem reduzieren. Da FreeBSD mit einer qualitativ hochwertigen Dokumentation seiner Interna ausgeliefert wird und über ein effektives Schwachstellen-Management und Release-Engineering-Prozesse verfügt, bleiben die Kosten zur Aufrechterhaltung der Aktualität gering.
+
+[[freebsd-technologies]]
+=== Technologien
+
+Das FreeBSD-Projekt unterstützt eine Vielzahl von Technologien. Eine Auswahl ist im Folgenden aufgelistet:
+
+* Ein vollständiges System, das sich für link:https://www.FreeBSD.org/platforms/[viele Architekturen:] selbst cross-hosten kann.
+* Ein modularer, symmetrischer, multiprozessorfähiger Kernel, mit nachladbaren Kernelmodulen und einem flexiblen und leicht zu bedienenden Konfigurationssystem.
+* Unterstützung für die Emulation von Linux(TM)- und SVR4-Binärdateien mit nahezu realer Geschwindigkeit. Unterstützung für binäre Windows(TM) (NDIS) Netzwerktreiber.
+* Bibliotheken für viele Programmieraufgaben: Archivierung, Unterstützung von FTP, HTTP und nebenläufiger Programmierung. All das auf Basis einer vollwertigen POSIX(TM)-konformen Plattform.
+* Sicherheitsfunktionen: Mandatory Access Control (man:mac[9]), jails (man:jail[2]), ACLs und Unterstützung kryptographischer Geräte im Kernel.
+* Netzwerkfunktionen: Firewalling, QoS-Management, Hochleistungs-TCP/IP-Netzwerk mit Unterstützung für viele Erweiterungen.
++ 
+Das im FreeBSD-Kernel integrierte Netgraph (man:netgraph[4])-Framework erlaubt es, Kernel-Netzwerkmodule auf flexible Weise miteinander zu verbinden.
+* Unterstützung für Speichertechnologien: Fibre Channel, SCSI, Software- und Hardware-RAID, ATA und SATA.
++ 
+FreeBSD unterstützt eine Reihe von Dateisystemen, und sein natives UFS2-Dateisystem unterstützt Soft-Updates, Snapshots und sehr große Dateisysteme (16TB pro Dateisystem) <<McKu1999>>.
++ 
+Das FreeBSD-Kernel-Framework GEOM (man:geom[4]) erlaubt das flexible Zusammenstellen von Kernel-Speichermodulen.
+* Über 24.000 portierte Programme, sowohl kommerzielle als auch Open-Source-Anwendungen, werden mit der FreeBSD-Ports-Sammlung verwaltet.
+
+=== Organisatorische Struktur
+
+FreeBSD hat eine nicht-hierarchische Organisationsstruktur.
+
+Es gibt im Wesentlichen zwei Arten von Mitwirkenden an FreeBSD: allgemeine Benutzer von FreeBSD und Entwickler mit Schreibzugriff (im Jargon als _committers_ bezeichnet) auf die Quellcode-Basis.
+
+In der ersten Gruppe gibt es viele Tausende von Mitwirkenden (Contributors). Die überwiegende Mehrheit der Beiträge zu FreeBSD stammt von Einzelpersonen aus dieser Gruppe. Commit-Rechte (Schreibzugriff) auf das Repository werden an Personen vergeben, die konsistent zum Projekt beitragen. Commit-Rechte sind mit zusätzlichen Verantwortlichkeiten verbunden, und neuen Committern werden Mentoren zugeteilt, die ihnen helfen, sich in die Materie einzuarbeiten.
+
+.Die Organisation von FreeBSD
+image::freebsd-organization.png[]
+
+Für die Konfliktlösung ist ein neunköpfiges "Kernteam (Core Team)" zuständig, das aus dem Kreis der Committer gewählt wird.
+
+FreeBSD kennt keine "von Unternehmen angestellten" Committer. Die einzelnen Committer tragen die Verantwortung für die Änderungen, die sie am Code vornehmen. Das link:{committers-guide}[Handbuch für FreeBSD-Committer]<<ComGuide>> beschreibt die Regeln und Pflichten für Committer.
+
+Das Projektmodell von FreeBSD wird ausführlich in <<Nik2005>> untersucht.
+
+=== Abläufe beim Release-Engineering von FreeBSD
+
+FreeBSD's release engineering processes play a major role in ensuring that its released versions are of a high quality. At any point of time, FreeBSD's volunteers support multiple code lines (<<fig-freebsd-branches>>):
+
+* New features and disruptive code enters on the development branch, also known as the _-CURRENT_ branch.
+* _-STABLE_ branches are code lines that are branched from HEAD at regular intervals. Only tested code is allowed onto a -STABLE branch. New features are allowed once they have been tested and stabilized in the -CURRENT branch.
+* _-RELEASE_ branches are maintained by the FreeBSD security team. Only bug fixes for critical issues are permitted onto -RELEASE branches.
+
+[[fig-freebsd-branches]]
+.FreeBSD Release Branches
+image::freebsd-branches.png[]
+
+Code lines are kept alive for as long as there is user and developer interest in them.
+
+Machine architectures are grouped into "tiers"; _Tier 1_ architectures are fully supported by the project's release engineering and security teams, _Tier 2_ architectures are supported on a best effort basis, and experimental architectures comprise _Tier 3_. The list of link:{committers-guide}#archs[supported architectures] is part of the FreeBSD documentation collection.
+
+The release engineering team publishes a link:https://www.FreeBSD.org/releng/[road map] for future releases of FreeBSD on the project's web site. The dates laid down in the road map are not deadlines; FreeBSD is released when its code and documentation are ready.
+
+FreeBSD's release engineering processes are described in <<RelEngDoc>>.
+
+[[freebsd-collaboration]]
+== Collaborating with FreeBSD
+
+Open-source projects like FreeBSD offer finished code of a very high quality.
+
+While access to quality source code can reduce the cost of initial development, in the long-term the costs of managing change begin to dominate. As computing environments change over the years and new security vulnerabilities are discovered, your product too needs to change and adapt. Using open-source code is best viewed not as a one-off activity, but as an _ongoing process_. The best projects to collaborate with are the ones that are _live_; i.e., with an active community, clear goals and a transparent working style.
+
+* FreeBSD has an active developer community around it. At the time of writing there are many thousands of contributors from every populated continent in the world and over 300 individuals with write access to the project's source repositories.
+* The goals of the FreeBSD project are <<Hub1994>>:
+
+** To develop a high-quality operating system for popular computer hardware, and,
+** To make our work available to all under a liberal license.
+
+* FreeBSD enjoys an open and transparent working culture. Nearly all discussion in the project happens by email, on http://lists.FreeBSD.org/mailman/listinfo[public mailing lists] that are also archived for posterity. The project's policies are link:https://www.FreeBSD.org/internal/policies/[documented] and maintained under revision control. Participation in the project is open to all.
+
+[[freebsd-org]]
+=== Understanding FreeBSD culture
+
+To be able to work effectively with the FreeBSD project, you need to understand the project's culture.
+
+Volunteer driven projects operate under different rules than for-profit corporates. A common mistake that companies make when venturing into the open-source world is that of underplaying these differences.
+
+*Motivation* Most contributions to FreeBSD are done voluntarily without monetary rewards entering the picture. The factors that motivate individuals are complex, ranging from altruism, to an interest in solving the kinds of problems that FreeBSD attempts to solve. In this environment, "elegance is never optional"<<Nor1993>>.
+
+*The Long Term View* FreeBSD traces its roots back nearly twenty years to the work of the Computer Science Research Group at the University of California Berkeley. A number of the original CSRG developers remain associated with the project.
+
+The project values long-term perspectives <<Nor2001>>. A frequent acronym encountered in the project is DTRT, which stands for "Do The Right Thing".
+
+*Development Processes* Computer programs are tools for communication: at one level programmers communicate their intentions using a precise notation to a tool (a compiler) that translates their instructions to executable code. At another level, the same notation is used for communication of intent between two programmers.
+
+Formal specifications and design documents are seldom used in the project. Clear and well-written code and well-written change logs (<<fig-change-log>>) are used in their place. FreeBSD development happens by "rough consensus and running code"<<Carp1996>>.
+
+[.programlisting]
+....
+r151864 | bde | 2005-10-29 09:34:50 -0700 (Sat, 29 Oct 2005) | 13 lines
+Changed paths:
+   M /head/lib/msun/src/e_rem_pio2f.c
+
+Use double precision to simplify and optimize arg reduction for small
+and medium size args too: instead of conditionally subtracting a float
+17+24, 17+17+24 or 17+17+17+24 bit approximation to pi/2, always
+subtract a double 33+53 bit one.  The float version is now closer to
+the double version than to old versions of itself -- it uses the same
+33+53 bit approximation as the simplest cases in the double version,
+and where the float version had to switch to the slow general case at
+|x| == 2^7*pi/2, it now switches at |x| == 2^19*pi/2 the same as the
+double version.
+
+This speeds up arg reduction by a factor of 2 for |x| between 3*pi/4 and
+2^7*pi/4, and by a factor of 7 for |x| between 2^7*pi/4 and 2^19*pi/4.
+....
+
+[[fig-change-log]]
+.A sample change log entry
+Communication between programmers is enhanced by the use of a common coding standard man:style[9].
+
+*Communication Channels* FreeBSD's contributors are spread across the world. Email (and to a lesser extent, IRC) is the preferred means of communication in the project.
+
+=== Best Practices for collaborating with the FreeBSD project
+
+We now look at a few best practices for making the best use of FreeBSD in product development.
+
+Plan for the long term::
+Setup processes that help in tracking the development of FreeBSD. For example:
++
+*Track FreeBSD source code* The project makes it easy to mirror its SVN repository using link:@@URL_RELPREFIX@@/doc/en_US.ISO8859-1/articles/committers-guide/article.html#svn-advanced-use-setting-up-svnsync[svnsync]. Having the complete history of the source is useful when debugging complex problems and offers valuable insight into the intentions of the original developers. Use a capable source control system that allows you to easily merge changes between the upstream FreeBSD code base and your own in-house code.
++
+<<fig-svn-blame>> shows a portion of an annotated listing of the file referenced by the change log in <<fig-change-log>>. The ancestry of each line of the source is clearly visible. Annotated listings showing the history of every file that is part of FreeBSD are https://svnweb.freebsd.org/[available on the web].
++
+[.programlisting]
+....
+#REV         #WHO #DATE                                        #TEXT
+
+176410        bde 2008-02-19 07:42:46 -0800 (Tue, 19 Feb 2008) #include <sys/cdefs.h>
+176410        bde 2008-02-19 07:42:46 -0800 (Tue, 19 Feb 2008) __FBSDID("$FreeBSD$");
+  2116        jkh 1994-08-19 02:40:01 -0700 (Fri, 19 Aug 1994) 
+  2116        jkh 1994-08-19 02:40:01 -0700 (Fri, 19 Aug 1994) /* __ieee754_rem_pio2f(x,y)
+  8870    rgrimes 1995-05-29 22:51:47 -0700 (Mon, 29 May 1995)  *
+176552        bde 2008-02-25 05:33:20 -0800 (Mon, 25 Feb 2008)  * return the remainder of x rem pi/2 in *y
+176552        bde 2008-02-25 05:33:20 -0800 (Mon, 25 Feb 2008)  * use double precision for everything except passing x
+152535        bde 2005-11-16 18:20:04 -0800 (Wed, 16 Nov 2005)  * use __kernel_rem_pio2() for large x
+  2116        jkh 1994-08-19 02:40:01 -0700 (Fri, 19 Aug 1994)  */
+  2116        jkh 1994-08-19 02:40:01 -0700 (Fri, 19 Aug 1994) 
+176465        bde 2008-02-22 07:55:14 -0800 (Fri, 22 Feb 2008) #include <float.h>
+176465        bde 2008-02-22 07:55:14 -0800 (Fri, 22 Feb 2008) 
+  2116        jkh 1994-08-19 02:40:01 -0700 (Fri, 19 Aug 1994) #include "math.h"
+....
+
+[[fig-svn-blame]]
+.An annotated source listing generated using `svn blame`
++
+*Use a gatekeeper* Appoint a _gatekeeper_ to monitor FreeBSD development, to keep an eye out for changes that could potentially impact your products.
++
+*Report bugs upstream* If you notice bug in the FreeBSD code that you are using, file a https://www.FreeBSD.org/support/bugreports/[bug report]. This step helps ensure that you do not have to fix the bug the next time you take a code drop from upstream.
+Leverage FreeBSD's release engineering efforts::
+Use code from a -STABLE development branch of FreeBSD. These development branches are formally supported by FreeBSD's release engineering and security teams and comprise of tested code. 
+
+Donate code to reduce costs::
+A major proportion of the costs associated with developing products is that of doing maintenance. By donating non-critical code to the project, you benefit by having your code see much wider exposure than it would otherwise get. This in turn leads to more bugs and security vulnerabilities being flushed out and performance anomalies being identified and fixed. 
+
+Get support effectively::
+For products with tight deadlines, it is recommended that you hire or enter into a consulting agreement with a developer or firm with FreeBSD experience. The http://lists.FreeBSD.org/mailman/listinfo/freebsd-jobs[FreeBSD related employment mailing list] is a useful communication channel to find talent. The FreeBSD project maintains a link:https://www.FreeBSD.org/commercial/consult_bycat/[gallery of consultants and consulting firms] undertaking FreeBSD work. The http://www.bsdcertification.org/[BSD Certification Group] offers certification for all the major BSD derived OSes.
++
+For less critical needs, you can ask for help on the http://lists.FreeBSD.org/mailman/listinfo[project mailing lists]. A useful guide to follow when asking for help is given in <<Ray2004>>. 
+
+Publicize your involvement::
+You are not required to publicize your use of FreeBSD, but doing so helps both your effort as well as that of the project.
++
+Letting the FreeBSD community know that your company uses FreeBSD helps improve your chances of attracting high quality talent. A large roster of support for FreeBSD also means more mind share for it among developers. This in turn yields a healthier foundation for your future.
+
+Support FreeBSD developers::
+Sometimes the most direct way to get a desired feature into FreeBSD is to support a developer who is already looking at a related problem. Help can range from hardware donations to direct financial assistance. In some countries, donations to the FreeBSD project enjoy tax benefits. The project has a dedicated link:https://www.FreeBSD.org/donations/[donations liaison] to assist donors. The project also maintains a web page where developers link:https://www.FreeBSD.org/donations/wantlist/[list their needs]. 
++
+As a policy the FreeBSD project link:{contributors}[acknowledges] all contributions received on its web site.
+
+[[conclusion]]
+== Conclusion
+
+The FreeBSD project's goals are to create and give away the source code for a high-quality operating system. By working with the FreeBSD project you can reduce development costs and improve your time to market in a number of product development scenarios.
+
+We examined the characteristics of the FreeBSD project that make it an excellent choice for being part of an organization's product strategy. We then looked at the prevailing culture of the project and examined effective ways of interacting with its developers. The article concluded with a list of best-practices that could help organizations collaborating with the project.
+
+:sectnums!:
+
+[bibliography]
+== Bibliography
+
+[[Carp1996]] [Carp1996] http://www.ietf.org/rfc/rfc1958.txt[The Architectural Principles of the Internet] B. Carpenter. The Internet Architecture Board.The Internet Architecture Board. Copyright(R) 1996.
+
+[[ComGuide]] [ComGuide] link:{committers-guide}[Committer's Guide] The FreeBSD Project. Copyright(R) 2005.
+
+[[GoldGab2005]] [GoldGab2005] http://dreamsongs.com/IHE/IHE.html[Innovation Happens Elsewhere: Open Source as Business Strategy] Ron Goldman. Richard Gabriel. Copyright(R) 2005. Morgan-Kaufmann.
+
+[[Hub1994]] [Hub1994] link:{contributing}[Contributing to the FreeBSD Project] Jordan Hubbard. Copyright(R) 1994-2005. The FreeBSD Project.
+
+[[McKu1999]] [McKu1999] http://www.usenix.org/publications/library/proceedings/usenix99/mckusick.html[Soft Updates: A Technique for Eliminating Most Synchronous Writes in the Fast Filesystem] Kirk McKusick. Gregory Ganger. Copyright(R) 1999.
+
+[[McKu1999-1]] [McKu1999-1] http://www.oreilly.com/catalog/opensources/book/kirkmck.html[Twenty Years of Berkeley Unix: From AT&T-Owned to Freely Redistributable] Marshall Kirk McKusick. http://www.oreilly.com/catalog/opensources/book/toc.html[Open Sources: Voices from the Open Source Revolution] O'Reilly Inc.. Copyright(R) 1993.
+
+[[Mon2005]] [Mon2005] link:{bsdl-gpl}[Why you should use a BSD style license for your Open Source Project] Bruce Montague. The FreeBSD Project. Copyright(R) 2005.
+
+[[Nik2005]] [Nik2005] link:{dev-model}[A project model for the FreeBSD Project] Niklas Saers. Copyright(R) 2005. The FreeBSD Project.
+
+[[Nor1993]] [Nor1993] http://www.norvig.com/luv-slides.ps[Tutorial on Good Lisp Programming Style] Peter Norvig. Kent Pitman. Copyright(R) 1993.
+
+[[Nor2001]] [Nor2001] http://www.norvig.com/21-days.html[Teach Yourself Programming in Ten Years] Peter Norvig. Copyright(R) 2001.
+
+[[Ray2004]] [Ray2004] http://www.catb.org/~esr/faqs/smart-questions.html[How to ask questions the smart way] Eric Steven Raymond. Copyright(R) 2004.
+
+[[RelEngDoc]] [RelEngDoc] link:{releng}[FreeBSD Release Engineering] Murray Stokely. Copyright(R) 2001. The FreeBSD Project.

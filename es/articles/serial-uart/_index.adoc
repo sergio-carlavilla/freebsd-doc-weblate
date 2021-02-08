@@ -751,7 +751,7 @@ If the messages go by too fast to see,
 +
 will show you the boot messages.
 +
-. Next, appropriate entries in [.filename]#/dev# for the devices must be made using the [.filename]#/dev/MAKEDEV# script. This step can be omitted if you are running FreeBSD{nbsp}5.X with a kernel that has man:devfs[5] support compiled in.
+. Next, appropriate entries in [.filename]#/dev# for the devices must be made using the [.filename]#/dev/MAKEDEV# script. This step can be omitted if you are running FreeBSD 5.X with a kernel that has man:devfs[5] support compiled in.
 + 
 If you do need to create the [.filename]#/dev# entries, run the following as `root`:
 +

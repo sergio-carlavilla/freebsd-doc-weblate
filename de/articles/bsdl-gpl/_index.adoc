@@ -1,0 +1,187 @@
+---
+title: Warum Sie eine BSD-artige Lizenz für Ihr Open-Source-Projekt verwenden sollten
+authors:
+  - author: Bruce Montague
+    email: brucem@alumni.cse.ucsc.edu
+releaseinfo: "$FreeBSD$" 
+trademarks: ["freebsd", "intel", "general"]
+---
+
+= Warum Sie eine BSD-artige Lizenz für Ihr Open-Source-Projekt verwenden sollten
+:doctype: article
+:toc: macro
+:toclevels: 1
+:icons: font
+:sectnums:
+:sectnumlevels: 6
+:source-highlighter: rouge
+:experimental:
+
+'''
+
+toc::[]
+
+[[intro]]
+== Einleitung
+
+Dieses Dokument plädiert dafür, eine BSD-artige Lizenz für Software und Daten zu verwenden. BSD-artige Lizenzen sollten insbesondere an Stelle der GPL verwendet werden. Dieses Dokument versteht sich auch als Einführung und Zusammenfassung der Debatte über das Für und Wider zwischen den Open-Source-Lizenzen BSD und GPL.
+
+[[history]]
+== Kurzer Überblick über die Open-Source-Geschichte
+
+Lange bevor der Begriff "Open Source" verwendet wurde, entwickelten Programmierer in lockeren Gemeinschaften Software und tauschten diese untereinander aus. Seit Anfang der 1950er Jahre entwickelten Organisationen wie http://www.share.org[SHARE] und http://www.decus.org[DECUS] einen Großteil der Software, die Computerhersteller mit ihrer Hardware anboten. In dieser Zeit konzentrierten sich Computerfirmen auf das Hardwaregeschäft. Alles, was die Kosten für Software reduzierte und gleichzeitig das Angebot an Programmen erhöhte, machte die Hardware-Firmen wettbewerbsfähiger.
+
+Dieses Geschäftsmodell änderte sich in den 1960er Jahren. 1965 entwickelte ADR die erste Software, die unabhängig von einem Hardware-Anbieter lizenziert wurde. ADR konkurrierte mit einem kostenlosen IBM-Paket, das ursprünglich von IBM-Kunden entwickelt worden war. ADR ließ sich 1968 ihre Software patentieren. Um die unerlaubte Weitergabe ihres Programms zu unterbinden, boten sie es Im Rahmen eines Geräteleasings an. Die Zahlungen wurden dabei über die gesamte Lebensdauer des Produkts verteilt. Auf diese Weise schützte ADR ihr Eigentum und kontrollierte sowohl den Weiterverkauf als auch die Wiederverwendung der Software.
+
+1969 beschuldigte das US-Justizministerium IBM der Zerstörung von Unternehmen durch Bündelung kostenloser Software mit IBM-Hardware. Daraufhin entbündelte IBM ihre Software: Software war nun ein von der Hardware unabhängiges Produkt.
+
+Im Jahr 1968 verhalf das Unternehmen Informatics mit dem ersten kommerziell erfolgreichen Programm dem gewerblichen Vertrieb von Software zum Durchbruch und etablierte sich als Softwareunternehmen mit sehr hohen Renditen. Informatics führte das Konzept der unbefristeten Lizenz ein, das heute in der gesamten Computerindustrie Standard ist, wobei das Eigentum an der Software niemals auf den Kunden übertragen wird.
+
+[[unix-license]]
+== Unix aus der Sicht der BSD-Lizenzen
+
+Das ursprüngliche Unix gehörte AT&T, einem staatlich regulierten Monopol, das schließlich vor dem Kartellgerichtshof landete. Es gab keinen legalen Zugang zum Softwaremarkt. Allerdings konnten man akademischen Einrichtungen Software zum Preis der Datenträger anbieten.
+
+An den Universitäten verbreitete sich Unix schnell, nachdem es Thema einer OS-Konferenz war. Sehr hilfreich war, dass Unix auf der PDP-11 lief, einem sehr preiswerten 16-Bit-Rechner, und in einer Hochsprache programmiert war, die sich nachweislich gut zur Systemprogrammierung eignet. Die Hardware-Schnittstelle der DEC PDP-11 war offen dokumentiert. Das erleichterte es den Kunden, ihr eigenes Betriebssystem zu schreiben, was durchaus üblich war. In einem berühmten Satz erklärte DEC-Gründer Ken Olsen: "Software kommt aus dem Himmel, wenn man gute Hardware hat".
+
+Der Unix-Schöpfer Ken Thompson kehrte 1975 an seine Alma Mater, die University of California Berkeley (UCB), zurück und unterrichtete dort den Kernel Zeile für Zeile. Dies führte schließlich zu einem sich entwickelnden System namens BSD (Berkeley Standard Distribution). Die UCB konvertierte Unix auf 32-Bits, fügte virtuellen Speicher hinzu und implementierte die Version des TCP/IP-Stacks, auf dem das Internet im Wesentlichen aufgebaut wurde. Die UCB stellte BSD zu den Kosten der Datenträger zur Verfügung. Dies erfolgte unter den Bedingungen, die als "BSD-Lizenz" bezeichnet wurden. Ein Kunde kaufte Unix von AT&T und bestellte dann ein BSD-Tape bei der UCB.
+
+Ein kartellrechtliches Verfahren der Regierung gegen ATT endete Mitte der 1980er Jahre mit der Zerschlagung von ATT. Unix war immer noch Eigentum von ATT und konnte nun kommerziell vertrieben werden. ATT vermarktete aggressiv Lizenzen und die meisten kommerziellen Unixe jener Zeit stammen von ATT ab.
+
+In the early 1990's AT&T sued UCB over license violations related to BSD. UCB discovered that AT&T had incorporated, without acknowledgment or payment, many improvements due to BSD into AT&T's products, and a lengthy court case, primarily between AT&T and UCB, ensued. During this period some UCB programmers embarked on a project to rewrite any AT&T code associated with BSD. This project resulted in a system called BSD 4.4-lite (lite because it was not a complete system; it lacked 6 key AT&T files).
+
+Eine ausführliche Artikelreihe im Dr.-Dobbs-Magazin beschäftigte sich mit einer von BSD abgeleiteten Version von Unix für 386er PCs, die BSD-lizenzierten Ersatz für die sechs fehlenden 4.4 Lite-Dateien enthielt. Dieses 386BSD genannte System geht auf den früheren UCB-Programmierer William Jolitz zurück. Es wurde die ursprüngliche Basis aller heute verwendeten BSDs für PCs.
+
+In the mid 1990s, Novell purchased AT&T's Unix rights and a (then secret) agreement was reached to terminate the lawsuit. UCB soon terminated its support for BSD.
+
+[[current-bsdl]]
+== Die aktuelle Lage bei den FreeBSD- und BSD-Lizenzen
+
+Die so genannte http://www.opensource.org/licenses/bsd-license.php[ neue BSD-Lizenz], die in den letzten Jahren bei FreeBSD verwendet wurde, trifft im Prinzip folgende Aussage: Sie können alles mit dem Programm oder seinem Quellcode machen, haben aber keine Garantie und keiner der Autoren hat irgendeine Haftung (im Grunde können Sie niemanden verklagen). Diese neue BSD-Lizenz soll die kommerzielle Verwertung der Produkte fördern. Jeder BSD-Code kann verkauft oder in proprietäre Produkte eingebunden werden, ohne dass die Verfügbarkeit Ihres Codes oder Ihr zukünftiges Handeln eingeschränkt wird.
+
+Die neue BSD-Lizenz ist nicht mit "Public Domain" zu verwechseln. Obwohl eine Sache als Public Domain auch für jedermann kostenlos ist, hat sie keinen Eigentümer.
+
+[[origins-gpl]]
+== Die Ursprünge der GPL
+
+Während die Zukunft von Unix in den späten 1980er und frühen 1990er Jahren auf der Kippe stand, trug mit der GPL ein anderes Projekt mit bedeutenden lizenzrechtlichen Überlegungen erste Früchte.
+
+Richard Stallman, der Entwickler von Emacs, arbeitete am MIT, als seine Abteilung von hauseigenen zu proprietären Systemen wechselte. Als Stallman feststellte, dass er selbst geringfügige Verbesserungen am System nicht mehr legal hinzufügen konnte, wurde er wütend. (Viele von Stallmans Mitarbeitern hatten das MIT zuvor bereits verlassen, um zwei Firmen zu gründen, die auf am MIT entwickelter und vom MIT lizenzierter Software basieren; es scheint Uneinigkeit über den Zugang zum Quellcode dieser Software gegeben zu haben). Stallman entwickelte eine Alternative zur kommerziellen Software-Lizenz und nannte sie die GPL oder "GNU Public License". Er gründete auch eine gemeinnützige Stiftung, die http://www.fsf.org[Free Software Foundation] (FSF), die vorhatte, ein vollständiges Betriebssystem, einschließlich aller dazugehörigen Software, zu entwickeln, das nicht der proprietären Lizenz unterliegt. Dieses System wurde GNU genannt, für "GNU is Not Unix".
+
+Die GPL wurde als Gegenstück zu den herkömmlichen proprietären Lizenzen entwickelt. Hierzu müssen alle Änderungen, die an einem GPL-Programm vorgenommen werden, an die GPL-Gemeinschaft zurückgegeben werden. Dies geschieht durch die Anforderung, dass der Quellcode des Programms dem Benutzer zur Verfügung gestellt werden muss, und dass jedes Programm, das GPL-Code verwendet oder mit GPL-Code verlinkt wird, unter der GPL stehen muss. Die GPL soll verhindern, dass Software proprietär wird. So heißt es im letzten Absatz der GPL:
+
+"Diese General Public License gestattet nicht die Einbindung Ihres Programms in proprietäre Programme."[1]
+
+Da die http://www.opensource.org/licenses/gpl-license.php[GPL] eine komplexe Lizenz ist, hier ein paar Faustregeln zur Anwendung der GPL:
+
+* Sie können für den Vertrieb, den Support oder die Dokumentation der Software so viel verlangen, wie Sie wollen, aber Sie können die Software an sich nicht verkaufen.
+* Gemäß der Faustregel muss ein Programm unter der GPL stehen, wenn zum Kompilieren eines Programms Quellcode benötigt wird, der unter der GPL steht. Das statische Linken zu einer GPL-Bibliothek erfordert, dass ein Programm unter der GPL steht.
+* Die GPL verlangt, dass alle Patente, die auf Software unter der GPL beruhen, für die freie Nutzung durch jedermann lizenziert werden müssen.
+* Das einfache Zusammenfügen von Software, wie z.B. das Speichern mehrerer Programme auf einer Festplatte, zählt nicht als Einbinden von GPL-lizenzierten Programmen in nicht GPL-lizenzierte Programme.
+* Die Ausgabe eines Programms zählt nicht als abgeleitetes Werk. Dadurch kann der gcc-Compiler in kommerziellen Umgebungen ohne rechtliche Probleme eingesetzt werden.
+* Da der Linux-Kernel unter der GPL steht, muss jeder Code, der statisch mit dem Linux-Kernel verlinkt ist, unter die GPL gestellt werden. Diese Anforderung kann durch dynamisches Verlinken von ladbaren Kernelmodulen umgangen werden. Das ermöglicht es Unternehmen, binäre Treiber zu verteilen, hat aber oft den Nachteil, dass diese nur für bestimmte Versionen des Linux-Kernels funktionieren.
+
+Zum Teil aufgrund ihrer Komplexität werden heute in vielen Teilen der Welt die rechtlichen Grundlagen der GPL im Hinblick auf Linux und damit zusammenhängende Software ignoriert. Die langfristigen Auswirkungen dieser Entwicklung sind unklar.
+
+[[origins-lgpl]]
+== Die Ursprünge von Linux und der LGPL
+
+Während die kommerziellen Unix-Kriege tobten, wurde der Linux-Kernel als Unix-Klon für PCs entwickelt. Linus Torvalds begründet die Existenz von Linux mit der Existenz des GNU C-Compilers und der dazugehörigen GNU-Tools. Torvalds stellte den Linux-Kernel unter die GPL.
+
+Beachten Sie dabei Folgendes: Die GPL verlangt, dass jeder statisch verlinkte Code, der unter der GPL steht, auch unter die GPL gestellt wird. Der Quellcode für diesen Code muss daher dem Benutzer des Programms zur Verfügung gestellt werden. Dynamisches Linken gilt jedoch nicht als Verstoß gegen die GPL. Es entstand ein enormer Druck, proprietäre Anwendungen für Linux bereitzustellen. Solche Anwendungen verlinken häufig auf Systembibliotheken. Dies führte zu einer modifizierten Version der GPL mit dem Namen http://www.opensource.org/licenses/lgpl-license.php[LGPL] ("Library", inzwischen in "Lesser", GPL, umbenannt). Die LGPL erlaubt es, proprietären Code mit der GNU C-Bibliothek, glibc, zu verlinken. Sie müssen den Quellcode nicht für Code freigeben, der dynamisch auf eine LGPL-Bibliothek verlinkt.
+
+Wenn man eine Anwendung statisch mit der glibc linkt, was häufig in eingebetteten Systemen erforderlich ist, kann die Anwendung nicht proprietär sein, d.h. der Quelltext muss freigegeben werden. Sowohl die GPL als auch die LGPL verlangen, dass alle Änderungen am Code direkt unter der entsprechenden Lizenz veröffentlicht werden.
+
+[[orphaning]]
+== Open-Source-Lizenzen und das Problem der Verwaisung
+
+Eines der größten Probleme bei proprietärer Software wird als "Verwaisung" bezeichnet. Es tritt auf, wenn ein einzelner geschäftlicher Misserfolg oder eine Änderung der Produktstrategie zu einer Art Schneeballeffekt führt: Abhängige Systeme und Unternehmen scheitern dann aus Gründen, auf die sie keinen Einfluss haben. Jahrzehntelange Erfahrung hat gezeigt, dass die momentane Größe oder der Erfolg eines Softwareanbieters keine Garantie dafür ist, dass seine Software weiterhin verfügbar bleibt, da sich die aktuellen Marktbedingungen und Strategien schnell ändern können.
+
+Die GPL will die Verwaisung verhindern, indem sie die Bindung an geistiges Eigentum aufhebt.
+
+Eine BSD-Lizenz gibt einem kleinen Unternehmen das Äquivalent einer Software-in-Escrow-Lizenz ohne rechtliche Komplikationen oder Kosten. Wenn ein BSD-lizenziertes Programm verwaist, kann eine Firma das Programm, auf das sie angewiesen ist, einfach proprietär übernehmen. Eine noch bessere Situation entsteht, wenn eine BSD-Codebasis von einem kleinen informellen Konsortium unterhalten wird, da der Entwicklungsprozess nicht vom Überleben einer einzelnen Firma oder Produktlinie abhängt. Die Überlebensfähigkeit eines Entwicklerteams, das völlig in seiner Arbeit aufgeht, ist wesentlich wichtiger als die bloße Verfügbarkeit des Quellcodes.
+
+[[license-cannot]]
+== Was eine Lizenz nicht leisten kann
+
+Keine Lizenz kann die künftige Verfügbarkeit einer Software garantieren. Obwohl ein Rechteinhaber gewöhnlich jederzeit die Verwertungsbedingungen ändern kann, wird in der BSD-Gemeinschaft davon ausgegangen, dass ein solcher Versuch lediglich zu einem Fork des Quellcodes führt.
+
+Die GPL verbietet es ausdrücklich, die Lizenz zu widerrufen. Es ist jedoch vorgekommen, dass eine Firma (Mattel) ein GPL-Rechte (cphack) erwarb, die komplette Lizenz widerrief, vor Gericht ging und sich durchsetzte [2]. Das heißt, sie widerriefen rechtlich die gesamte Verbreitung und alle auf Basis der GPL abgeleiteten Werke. Offen ist die Frage, ob dies bei einer größeren und weiter verstreuten Verbreitung geschehen könnte. Es besteht auch eine gewisse Verwirrung darüber, ob die Software wirklich unter der GPL stand.
+
+Weiteres Beispiel: Red Hat kaufte das Softwareunternehmen Cygnus, das die Entwicklung der FSF-Compiler-Tools übernommen hatte. Cygnus war dazu in der Lage, weil das Unternehmen ein Geschäftsmodell entwickelt hatte, bei dem es Support für GNU-Software anbot. Dadurch konnte das Unternehmen etwa 50 Entwickler beschäftigen. Da Cygnus den Großteil der Änderungen beisteuerte, konnte das Unternehmen die Ausrichtung der Programme beeinflussen. Laut Donald Rosenberg "leben Projekte, die Lizenzen wie die GPL verwenden [...] unter der ständigen Bedrohung, dass jemand das Projekt übernimmt, indem er eine bessere Version des Codes produziert und dies schneller als die ursprünglichen Eigentümer tut". [3]
+
+[[gpl-advantages]]
+== Vorteile und Nachteile der GPL
+
+Häufig wird die GPL verwendet, wenn der gcc-Compiler modifiziert oder erweitert wird. Wenn man mit besonderen Spezial-CPUs in Umgebungen arbeitet, in denen sämtliche Software-Kosten wahrscheinlich als Overhead gelten, ist das eine besonders geeignete Lösung. In solchen Fällen wird kaum erwartet, dass andere den resultierenden Compiler verwenden.
+
+Die GPL ist außerdem für kleine Unternehmen attraktiv, die CDs in einem Umfeld verkaufen, in dem der Endnutzer trotz der "Buy low, Sell high"-Methode dennoch ein sehr preiswertes Produkt erhält. Die GPL ist auch für Unternehmen attraktiv, deren Geschäftsmodell auf Dienstleistungen wie technischen Support und dem Bereitstellen von Dokumentation basiert. Auf diese Weise wollen sie mit GPL-Software in einer Welt des geistigen Eigentums überleben.
+
+Weniger bekannt ist ein ursprünglich nicht von der GPL vorgesehener Einsatzzweck: Großkonzerne können damit die Preise von Softwarefirmen drücken. Mit anderen Worten: Die GPL eignet sich gut als Marketinginstrument, verringert potenziell den gesamtwirtschaftlichen Nutzen und fördert monopolistisches Verhalten.
+
+Die GPL kann für alle ein echtes Problem darstellen, die Software kommerziell vermarkten und Gewinne erwirtschaften wollen. So verkompliziert die GPL beispielsweise die Situation eines Doktoranden, der direkt ein Unternehmen gründen will, um seine Forschungsergebnisse zu verwerten. Ebenso ist es für einen Studenten schwierig, bei einem Unternehmen zu arbeiten, wenn ein vielversprechendes Forschungsprojekt vermarktet werden soll.
+
+Die GPL ist für alle eine schlechte Lizenz, die mit statisch gelinkten Implementierungen mehrerer Softwarestandards arbeiten müssen, da sie proprietäre Implementierungen dieser Standards ausschließt. Sie minimiert somit die Anzahl der Programme, die mit einem GPL-lizenzierten Standard entwickelt werden können. Die GPL war ursprünglich nicht dazu gedacht, einen Mechanismus zu schaffen, auf dessen Grundlage proprietäre Produkte entwickelt werden. (Dies gilt nicht für Linux-Anwendungen, weil diese nicht statisch, sondern dynamisch linken.)
+
+Die GPL möchte Programmierer dazu bringen, an Programmen mitzuwirken, die sich stetig weiterentwickeln, um dann bei der Distribution und Unterstützung dieser Programme zu konkurrieren. Diese Vorgehensweise erscheint unrealistisch bei zahlreichen notwendigen Standards für Kernsysteme. Diese können in sehr unterschiedlichen Umgebungen eingesetzt werden, die eine kommerzielle Anpassung oder Integration mit Legacy-Standards unter bestehenden (nicht unter der GPL stehenden) Lizenzen erfordern. Echtzeitsysteme sind oft statisch gelinkt. Aus diesem Grund sehen viele Hersteller eingebetteter Systeme die GPL und LGPL zweifellos problematisch.
+
+Die GPL kümmert sich nicht um den realen Bedarf, sondern richtet alle Anstrengungen auf das Forschungs- und Entwicklungsstadium. Das maximiert den Nutzen für Forscher und Entwickler, verursacht jedoch unbekannte Kosten für alle, die von einer größeren Verbreitung profitieren würden.
+
+Die GPL wurde konzipiert, um zu verhindern, dass aus Forschungsergebnissen proprietäre Produkte entstehen. Dieser Schritt gilt meist als der letzte Schritt in der traditionellen Technologietransfer-Pipeline. Selbst bei besten Voraussetzungen ist er schwierig genug – die GPL wollte ihn unmöglich machen.
+
+[[bsd-advantages]]
+== Vorteile von BSD
+
+Eine BSD-artige Lizenz ist eine gute Wahl für langfristige Forschungsprojekte oder Projekte, die eine solche Entwicklungsumgebung mit folgenden Eigenschaften benötigen:
+
+* nahezu null Kosten
+* langfristiger Entwicklungshorizont
+* gewährt jedermann die Möglichkeit, die endgültigen Resultate mit minimalem rechtlichen Aufwand zu vermarkten.
+
+Oft mag folgende Überlegung ausschlaggebend sein, so wie damals, als das Apache-Projekt über seine Lizenz entschied:
+
+"Dieser Lizenztyp eignet sich optimal, um die Verwendung eines Referenz-Codes zu fördern, der ein Protokoll für einen verbreiteten Dienst implementiert. Auch aus diesem Grund haben wir diese Lizenz für die Apache Group ausgewählt – viele von uns wollten, dass HTTP bestehen bleibt und zu einem echten anbieterübergreifenden Standard wird. Es hätte uns nicht im Geringsten gestört, wenn Microsoft oder Netscape unsere HTTP-Engine oder irgendeine andere Komponente unseres Codes in ihre Produkte integriert hätten, wenn das dazu beitragen würde, zur weiteren Verbreitung von HTTP beizutragen ... Aus strategischer Sicht bedeutet all dies, dass das Projekt eine ausreichende Dynamik aufweisen muss und dass alle Beteiligten einen größeren Wert erkennen, wenn sie ihren Code in das Projekt einbringen, selbst Code, der einen Wert gehabt hätte, wenn er proprietär geblieben wäre."
+
+Entwickler finden die BSD-Lizenz häufig attraktiv, da sie rechtliche Probleme aus dem Weg räumt und ihnen erlaubt, mit dem Code zu machen, was sie wollen. Im Gegensatz dazu finden Personen die GPL attraktiv, die in erster Linie erwarten, ein System zu benutzen, anstatt es zu programmieren, oder die erwarten, dass andere den Code weiterentwickeln, oder die nicht erwarten, von ihrer Arbeit im Zusammenhang mit dem System leben zu können (wie z.B. Staatsbedienstete). Denn die GPL erzwingt, dass ihnen von anderen entwickelter Code zur Verfügung gestellt wird, und hält ihren Arbeitgeber davon ab, das Copyright zu behalten und damit die Software möglicherweise zu "begraben" oder verwaisen zu lassen. Wenn Sie Ihre Konkurrenten zwingen wollen, Ihnen zu helfen, ist die GPL attraktiv.
+
+Eine BSD-Lizenz ist nicht einfach ein Geschenk. Die Frage "Warum sollten wir unseren Konkurrenten helfen oder sie unsere Arbeit stehlen lassen?" taucht oft im Zusammenhang mit BSD-Lizenzen auf. Wenn ein Unternehmen eine Produktnische dominiert, die andere Unternehmen als strategisch wichtig einstufen, können sie unter einer BSD-Lizenz mit minimalem Aufwand ein Mini-Konsortium bilden. Durch eine wettbewerbsfähige BSD-Variante stellen Sie das Marktgleichgewicht wieder her und fördern außerdem Wettbewerb und Fairness. Auf diese Weise kann jedes Unternehmen davon ausgehen, dass es einen Nutzen daraus ziehen und gleichzeitig zur wirtschaftlichen Flexibilität und Effizienz beitragen kann. Und je schneller und leichter die Kooperationspartner dies erreichen können, desto erfolgreicher werden sie sein. Eine BSD-Lizenz ist im Wesentlichen eine minimal komplizierte Lizenz, die ein solches Verhalten begünstigt.
+
+Das Hauptanliegen der GPL, ein vollständiges und wettbewerbsfähiges Open-Source-System zum Selbstkostenpreis der Datenträger allgemein verfügbar zu machen, ist ein sinnvolles Ziel. Eine BSD-ähnliche Lizenz in Verbindung mit Ad-hoc-Zusammenschlüssen von Einzelpersonen kann dieses Ziel erreichen, ohne die wirtschaftlichen Erwägungen zunichte zu machen, die auf dem Einsatzzweck der Technologietransfer-Pipeline beruhen.
+
+[[recommendations]]
+== Konkrete Empfehlungen zum Gebrauch einer BSD-Lizenz
+
+* Eine BSD-Lizenz ist vorzuziehen, wenn Forschungsergebnisse möglichst weit verbreitet werden und der Wirtschaft nutzen sollen. Forschungsfördernde Einrichtungen wie die NSF, ONR und die DARPA sollten daher bereits in den ersten Phasen der geförderten Forschungsprojekte die Nutzung von Lizenzen im BSD-Stil für Software, Daten, Ergebnisse und offene Hardware befürworten. Sie sollten auch die Ausarbeitung von Standards fördern, die auf implementierten Open-Source-Systemen und laufenden Open-Source-Projekten basieren.
+* Die Regierung sollte dafür sorgen, dass beim Übergang von der Forschung zur praktischen Nutzung möglichst wenig Kosten und Schwierigkeiten auftreten. Die Bewilligung von Forschungsgeldern sollten zur Auflage machen, dass Ergebnisse unter eine Lizenz im BSD-Stil gestellt werden, die eine kommerzielle Nutzung erleichtert.
+* Langfristig betrachtet spiegeln die Ergebnisse einer BSD-Lizenz in vielen Fällen die wissenschaftlichen Zielsetzungen von Universitäten besser wider als urheberrechtlich geschützte oder patentierte Ergebnisse, die einer proprietären Universitätslizenz unterliegen. Vieles deutet darauf hin, dass Universitäten auf lange Sicht finanziell besser dastehen, wenn sie Forschungsergebnisse veröffentlichen und dann auf Spenden von kommerziell erfolgreichen Alumni setzen.
+* Häufig spiegeln die langfristigen Auswirkungen einer BSD-Lizenz in die wissenschaftlichen Zielsetzungen von Universitäten besser wider als urheberrechtlich geschützte oder patentierte Ergebnisse, die einer proprietären Universitätslizenz unterliegen. Vieles deutet darauf hin, dass Universitäten auf lange Sicht finanziell besser dastehen, wenn sie Forschungsergebnisse veröffentlichen und dann auf Spenden von kommerziell erfolgreichen Alumni setzen.
+* Wenn Firmen einen sich entwickelnden Standard fördern wollen, der Kernbestandteil kommerzieller Produkte anderer Firmen werden kann, ist Vorsicht vor der GPL geboten. Unabhängig von der verwendeten Lizenz gehört die resultierende Software in der Regel demjenigen, der die Mehrzahl der technischen Änderungen vornimmt und den Zustand des Systems am besten versteht. Die GPL führt bei einem Projekt schlicht zu mehr juristischen Reibungsverlusten.
+* Große Unternehmen, in denen Open-Source-Code entwickelt wird, sollten sich darüber im Klaren sein, dass Programmierer Open Source bevorzugen, weil dadurch dem Arbeitnehmer die Software auch bei einem Arbeitgeberwechsel zur Verfügung steht. Einige Unternehmen fördern diese Sicht Ihrer Mitarbeiter sogar mit Prämien, insbesondere dann, wenn es sich um Software handelt, die nicht direkt von strategischer Bedeutung ist. Es handelt sich faktisch um eine vorgezogene Altersversorgungsleistung mit potenziellen Opportunitätskosten, aber ohne direkte Kosten. Für Unternehmen kann es kostengünstig sein, Mitarbeiter zu motivieren, nach Anerkennung durch Kollegen außerhalb des Unternehmens zu streben, wobei dem Unternehmen selbst praktisch keine Nachteile entstehen.
+* Kleine Firmen sollten bei Software-Projekten, die durch Verwaisung gefährdet sind, wo immer möglich die BSD-Lizenz verwenden. Unternehmen jeder Größe sollten die Gründung entsprechender Open-Source-Projekte prüfen, wenn es zum gegenseitigen Vorteil ist, die mit einem echten Open-Source-Projekt im BSD-Stil verbundenen minimalen rechtlichen und organisatorischen Gemeinkosten gering zu halten.
+* Non-Profit-Organisationen sollten sich nach Möglichkeit an Open-Source-Projekten beteiligen. Typische Software-Engineering-Probleme, wie das Kombinieren von Code verschiedener Lizenzen, lassen sich durch BSD-ähnliche Lizenzen minimieren. Besonders Non-Profit-Organisationen, die sich mit Entwicklungsländern befassen, sollten der GPL misstrauisch gegenüberstehen. In manchen Regionen kann der Rechtsweg zu einem kostspieligen Unterfangen werden. Hier kann die Einfachheit der neuen BSD-Lizenz im Vergleich zur GPL von erheblichem Vorteil sein.
+
+[[conclusion]]
+== Fazit
+
+Anders als die GPL, die die proprietäre Kommerzialisierung von Open-Source-Code verhindern soll, schränkt die BSD-Lizenz zukünftiges Verhalten nur minimal ein. Dadurch kann BSD-Code Open Source bleiben oder in kommerzielle Lösungen integriert werden, wenn sich die Bedürfnisse eines Projekts oder Unternehmens ändern. Mit anderen Worten: Die BSD-Lizenz wird zu keinem Zeitpunkt des Entwicklungsprozesses zu einer juristischen Zeitbombe.
+
+Da die BSD-Lizenz außerdem nicht die rechtliche Komplexität der GPL- oder LGPL-Lizenzen aufweist, erlaubt sie es Entwicklern und Unternehmen, ihre Zeit mit der Erstellung und Förderung von gutem Code zu verbringen, anstatt sich Sorgen zu machen, ob der Code gegen die Lizenzvereinbarung verstößt.
+
+[[addenda]]
+== Literaturverzeichnis und Quellenangaben
+
+[.programlisting]
+....
+[1] http://www.gnu.org/licenses/gpl.html
+
+[2] http://archives.cnn.com/2000/TECH/computing/03/28/cyberpatrol.mirrors/
+
+[3] Open Source: the Unauthorized White Papers, Donald K. Rosenberg, IDG Books,
+    2000. Quotes are from page 114, ``Effects of the GNU GPL''.
+
+[4] In the "What License to Use?" section of
+    http://www.oreilly.com/catalog/opensources/book/brian.html
+
+Dieses Whitepaper ist eine Zusammenfassung folgender Arbeit:
+http://alumni.cse.ucsc.edu/~brucem/open_source_license.htm
+....

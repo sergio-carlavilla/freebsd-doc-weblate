@@ -27,14 +27,14 @@ Det vil ikke bli lagt til skuddsekund i slutten av Juni 2019. Forskjellen mellom
 
 Skuddsekund blir annonsert via http://datacenter.iers.org/[IERS] på https://www.iers.org/SharedDocs/News/EN/BulletinC.html[Bulletin C].
 
-Standard skuddsekund virkemåte er beskrevet i https://tools.ietf.org/html/rfc7164#section-3[RFC 7164]. Sjekk ut {man:time2posix[3] for mer informasjon.
+Standard skuddsekund virkemåte er beskrevet i https://tools.ietf.org/html/rfc7164#section-3[RFC 7164]. Sjekk ut  man:time2posix[3] for mer informasjon.
 
 [[leapseconds-posix]]
 == Standard Skuddsekund og dens virkemåte i FreeBSD
 
-Den enkleste måten å behandle skuddsekund på er med POSIX tids regler. FreeBSD bruker det sammen med link:{handbook}#network-ntp[NTP] som en standard. Når {man:ntpd[8] kjører og tiden er sykronisert med motstrømsNTP som behandler skuddsekund korrekt så vil systemet automatisk repetere det siste sekundet på slutten av dagen. Ingen andre justeringer er nødvendig.
+Den enkleste måten å behandle skuddsekund på er med POSIX tids regler. FreeBSD bruker det sammen med link:{handbook}#network-ntp[NTP] som en standard. Når  man:ntpd[8] kjører og tiden er sykronisert med motstrømsNTP som behandler skuddsekund korrekt så vil systemet automatisk repetere det siste sekundet på slutten av dagen. Ingen andre justeringer er nødvendig.
 
-Hvis motstrøms NTP servere ikke behandler skuddsekund korrekt, så vil {man:ntpd[8] justere tiden ett sekund etter den feilende serveren har lagt merke til dette og justerer selv.
+Hvis motstrøms NTP servere ikke behandler skuddsekund korrekt, så vil  man:ntpd[8] justere tiden ett sekund etter den feilende serveren har lagt merke til dette og justerer selv.
 
 Hvis NTP ikke er i bruk så er det behov for manuell justering etter at skuddsekundet har passert.
 

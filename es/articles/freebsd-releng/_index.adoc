@@ -282,10 +282,10 @@ Al realizar la transición de la fase `PRERELEASE` a `BETA`, entos archivos debe
 
 
 |[.filename]#en_US.ISO8859-1/htdocs/releases/12.0R/schedule.xml#
-|Cambie `%{nbsp}beta.local.where``IGNORE` a `INCLUDE`
+|Cambie `% beta.local.where``IGNORE` a `INCLUDE`
 
 |[.filename]#share/xml/release.ent#
-|Actualice `%{nbsp}betarel.vers` a `BETA_1_`
+|Actualice `% betarel.vers` a `BETA_1_`
 
 |[.filename]#share/xml/news.xml#
 |Añada una entrada anunciando la `BETA`
